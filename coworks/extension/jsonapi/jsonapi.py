@@ -1,4 +1,3 @@
-import traceback
 import typing as t
 from asyncio import iscoroutine
 from functools import update_wrapper
@@ -80,25 +79,25 @@ class JsonApi:
             if 'application/vnd.api+json' not in request.headers.getlist('accept'):
                 return handle_user_exception(e)
 
-            if isinstance(e, ValidationError):
+            try:
+                return handle_user_exception(e)
+            except JsonApiError as e:
+                return self._toplevel_error_response(e.errors)
+            except ValidationError:
                 app.full_logger_error(e)
                 errors = [Error(id="", status=BadRequest.code, code=err['type'],
                                 links=ErrorLinks(about=err['url']),  # type: ignore[typeddict-item]
                                 title=err['msg'], detail=str(err['loc'])) for err in e.errors()]
                 errors.append(Error(id="", status=BadRequest.code, title=e.title, detail=str(e)))
                 return self._toplevel_error_response(errors, status_code=BadRequest.code)
-
-            try:
-                msg, code, _ = handle_user_exception(e)  # type: ignore[misc]
-                errors = [Error(id='0', title=getattr(e, 'name', code), detail=msg, status=code)]
-                return self._toplevel_error_response(errors, status_code=code)
-            except (Exception,):
+            except HTTPException as e:
+                errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
+                return self._toplevel_error_response(errors, status_code=e.code)
+            except Exception as e:
                 app.full_logger_error(e)
-                if isinstance(e, JsonApiError):
-                    return self._toplevel_error_response(e.errors)
-
-            errors = [Error(id='0', title=e.__class__.__name__, detail=str(e), status=InternalServerError.code)]
-            return self._toplevel_error_response(errors, status_code=InternalServerError.code)
+                errors = [Error(id=e.__class__.__name__, title=e.__class__.__name__, detail=str(e),
+                                status=InternalServerError.code)]
+                return self._toplevel_error_response(errors, status_code=InternalServerError.code)
 
         app.handle_user_exception = _handle_user_exception  # type: ignore[method-assign]
 
@@ -150,30 +149,20 @@ def jsonapi(func):
         res = func(*args, **kwargs)
         if iscoroutine(res):
             res = await res
+        code = 200
         try:
             if isinstance(res, Query):
                 _toplevel = get_toplevel_from_query(res, ensure_one)
             elif isinstance(res, TopLevel):
                 _toplevel = res
             else:
-                errors = [Error(id='0', title="Not a toplevel structure", detail=str(res), status=500)]
-                _toplevel = TopLevel(errors=errors)
+                msg = f"{res} is not a Query or TopLevel instance"
+                raise InternalServerError(str(res))
         except NotFound:
-            if not ensure_one:
-                _toplevel = TopLevel(data=[])
-            else:
-                raise NotFound("The requested resource was not found")
-        except HTTPException as e:
-            errors = [Error(id='0', title=e.name, detail=e.description, status=e.code)]
-            _toplevel = TopLevel(errors=errors)
-            return _toplevel.model_dump_json(exclude_none=True), e.code
-        except Exception as e:
-            current_app.logger.exception(traceback.format_exc())
-            errors = [Error(id='0', title="Internal server error", detail=str(e), status=500)]
-            _toplevel = TopLevel(errors=errors)
-            return _toplevel.model_dump_json(exclude_none=True), InternalServerError.code
-
-        return _toplevel.model_dump_json(exclude_none=True)
+            if ensure_one:
+                raise
+            _toplevel = TopLevel(data=[])
+        return _toplevel.model_dump_json(exclude_none=True), code
 
     # Adds JSON:API query parameters
     sig = signature(_jsonapi)
@@ -307,7 +296,8 @@ def toplevel_from_pagination(pagination: Pagination):
     data = [to_ressource_data(d) for d in t.cast(t.Iterable, pagination)]
     included: list[dict] = [d.pop('included') for d in data if 'included' in d]
     resources = [Resource(**d) for d in data]
-    included_resources = {k: Resource(**d) for i in included for k, d in i.items()}  # use dict to avoid same included resource
+    included_resources = {k: Resource(**d) for i in included for k, d in
+                          i.items()}  # use dict to avoid same included resource
     toplevel = TopLevel(data=resources, included=included_resources.values() if included else None)
     fetching_context.add_pagination(toplevel, pagination)
     return toplevel
