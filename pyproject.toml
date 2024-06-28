@@ -59,7 +59,7 @@ ignore = ["F403"]
 
 [tool.mypy]
 python_version = "3.11"
-ignore_missing_imports = true
+disable_error_code = ["method-assign"]
 exclude = [
     "biz", # airflow using not compatible flask version
     "coworks/tech/directory.py", # will be removed
@@ -69,9 +69,8 @@ exclude = [
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = "requests_toolbelt.*"
+module = ["requests_toolbelt.*", "aws_xray_sdk.*", "jsonapi_pydantic.*", "okta.*"]
 ignore_missing_imports = true
-
 
 [tool.pytest.ini_options]
 markers = [
@@ -84,13 +83,14 @@ testpaths = [
 
 [tool.pdm.scripts]
 
-lint = { cmd = "ruff check coworks", help = "Linting using Ruff" }
-typecheck = { cmd = "mypy coworks", help = "Type checking using mypy" }
+ruff = { cmd = "ruff check coworks", help = "Linting using Ruff" }
+mypy = { cmd = "mypy coworks", help = "Type checking using mypy" }
 pytest = { cmd = "pytest", help = "Unit testing using pytest" }
 github_pytest = { cmd = "pytest -m 'not not_on_github'", help = "Unit testing using pytest" }
-test = { composite = ["lint", "typecheck", "pytest"] }
+test = { composite = ["ruff", "mypy", "pytest"] }
 on_github = { composite = ["lint", "typecheck", "github_pytest"] }
 plugins = { shell = "mkdir -p dist; zip -r dist/plugins.zip coworks/operators.py coworks/sensors.py coworks/biz/*" }
+pre_build = { cmd = "pdm test" }
 pre_fury = { cmd = "pdm build" }
 fury.env = { VERSION = 'grep -m 1 version pyproject.toml | tr -s " "| tr -d \" | cut -d" " -f3' }
 fury.shell = 'fury push dist/coworks-$(sh -c "${VERSION}")-py3-none-any.whl'

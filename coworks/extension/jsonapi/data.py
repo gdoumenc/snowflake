@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from pydantic import field_validator
 
 if t.TYPE_CHECKING:
-    from fetching import FetchingContext
+    from .fetching import FetchingContext
 
 
 class CursorPagination(BaseModel):

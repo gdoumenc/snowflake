@@ -73,7 +73,20 @@ class JsonApi:
 
     def init_app(self, app: TechMicroService):
         self.app = app
+        handle_http_exception = app.handle_http_exception
         handle_user_exception = app.handle_user_exception
+
+        def _handle_http_exception(e):
+            if 'application/vnd.api+json' not in request.headers.getlist('accept'):
+                return handle_http_exception(e)
+
+            try:
+                return handle_http_exception(e)
+            except JsonApiError as e:
+                return self._toplevel_error_response(e.errors)
+            except HTTPException as e:
+                errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
+                return self._toplevel_error_response(errors, status_code=e.code)
 
         def _handle_user_exception(e):
             if 'application/vnd.api+json' not in request.headers.getlist('accept'):
@@ -83,7 +96,7 @@ class JsonApi:
                 return handle_user_exception(e)
             except JsonApiError as e:
                 return self._toplevel_error_response(e.errors)
-            except ValidationError:
+            except ValidationError as e:
                 app.full_logger_error(e)
                 errors = [Error(id="", status=BadRequest.code, code=err['type'],
                                 links=ErrorLinks(about=err['url']),  # type: ignore[typeddict-item]
@@ -99,7 +112,8 @@ class JsonApi:
                                 status=InternalServerError.code)]
                 return self._toplevel_error_response(errors, status_code=InternalServerError.code)
 
-        app.handle_user_exception = _handle_user_exception  # type: ignore[method-assign]
+        app.handle_http_exception = _handle_http_exception
+        app.handle_user_exception = _handle_user_exception
 
         app.after_request(self._change_content_type)
 
@@ -157,7 +171,7 @@ def jsonapi(func):
                 _toplevel = res
             else:
                 msg = f"{res} is not a Query or TopLevel instance"
-                raise InternalServerError(str(res))
+                raise InternalServerError(msg)
         except NotFound:
             if ensure_one:
                 raise
