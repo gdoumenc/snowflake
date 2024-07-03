@@ -15,6 +15,7 @@ from coworks import TechMicroService
 from coworks.extension.xray import XRay
 from .jsonapi import JsonApiDataMixin
 from .jsonapi.data import CursorPagination
+from .jsonapi.data import JsonApiBaseModel
 from .jsonapi.data import JsonApiDict
 
 
@@ -105,6 +106,13 @@ class OdooQuery(BaseModel):
         }
         return self.odoo_execute_kw(params)
 
+    def one(self) -> list[JsonApiDataMixin]:
+        params = {
+            'limit': 1,
+            'offset': 0,
+        }
+        return self.odoo_execute_kw(params)[0]
+
     def odoo_execute_kw(self, params):
         res = self.odoo.odoo_execute_kw(self.model, self.method, [self.domain], params, bind_key=self.bind_key)
         return [self.odoo.basemodels.get(self.model, JsonApiDict)(**rec) for rec in res]  # type: ignore[operator]
@@ -138,7 +146,7 @@ class Odoo:
             self.binds[None] = config
 
         # jsonapi basemodel association from an odoo model
-        self.basemodels: dict[str, JsonApiDataMixin] = {}
+        self.basemodels: dict[str, JsonApiBaseModel] = {}
 
         if app:
             self.init_app(app)

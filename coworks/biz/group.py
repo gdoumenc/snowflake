@@ -19,10 +19,10 @@ class CoworksTaskGroup(TaskGroup):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.transformer_task: t.Optional[BaseOperator] = None
-        self.call_task: t.Optional[BaseOperator] = None
-        self.wait_task: t.Optional[BaseOperator] = None
-        self.read_task: t.Optional[BaseOperator] = None
+        self.transformer_task: BaseOperator | None = None
+        self.call_task: BaseOperator | None = None
+        self.wait_task: BaseOperator | None = None
+        self.read_task: BaseOperator | None = None
 
     @property
     def start_id(self):
@@ -38,8 +38,8 @@ class CoworksTaskGroup(TaskGroup):
 
 
 def TechMicroServiceAsyncGroup(group_id: str, transformer: t.Callable = None, read: bool = True,
-                               op_args: t.Optional[t.Collection[t.Any]] = None,
-                               op_kwargs: t.Optional[t.Mapping[str, t.Any]] = None,
+                               op_args: t.Collection[t.Any] | None = None,
+                               op_kwargs: t.Mapping[str, t.Any] | None = None,
                                method: str = 'get', timeout: int = 900,
                                raise_errors: bool = True, raise_400_errors: bool = True,
                                xcom_push: bool = True, trigger_rule=TriggerRule.ALL_SUCCESS,

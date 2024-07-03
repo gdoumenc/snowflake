@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 import os
 import re
@@ -13,7 +15,6 @@ from urllib.parse import urlencode
 from urllib.parse import urlsplit as urllib_urlsplit
 from urllib.parse import urlunsplit as urllib_urlunsplit
 
-import dotenv
 from flask import current_app
 from flask import json
 from flask import make_response
@@ -21,6 +22,7 @@ from pydantic import BaseModel
 from pydantic import ValidationError
 from werkzeug.exceptions import UnprocessableEntity
 
+import dotenv
 from .globals import request
 
 if t.TYPE_CHECKING:
@@ -41,7 +43,7 @@ OPEN_SQUARE_BRACKETED_KWARG_PATTERN = re.compile(r'([a-zA-Z0-9]+)__')
 SQUARE_BRACKETED_KWARG_PATTERN = re.compile(r'([a-zA-Z0-9]+)__([a-zA-Z0-9._]+)__')
 
 
-def create_cws_proxy(scaffold: "Scaffold", func, func_args: list[str], func_kwargs: dict,
+def create_cws_proxy(scaffold: Scaffold, func, func_args: list[str], func_kwargs: dict,
                      func_generic_kwargs: str | None):
     """Creates the AWS Lambda proxy function.
 

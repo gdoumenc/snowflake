@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import inspect
 import io
@@ -47,6 +49,7 @@ from .wrappers import TokenResponse
 if t.TYPE_CHECKING:  # pragma: no cover
     from _typeshed.wsgi import StartResponse
     from _typeshed.wsgi import WSGIEnvironment
+    from flask.app import App
 else:
     WSGIEnvironment = t.Any
     StartResponse = t.Any
@@ -57,7 +60,7 @@ else:
 #
 
 
-def entry(fun: t.Callable | None = None, binary_headers: dict[str, str] | None = None,
+def entry(fun: t.Optional[t.Callable] = None, binary_headers: dict[str, str] | None = None,
           stage: str | t.Iterable[str] | None = None,
           no_auth: bool = False, no_cors: bool = True) -> t.Callable:
     """Decorator to create a microservice entry point from function name.
@@ -178,15 +181,15 @@ class Blueprint(FlaskBlueprint):
     def logger(self) -> logging.Logger:
         return current_app.logger
 
-    def make_setup_state(self, app: "TechMicroService",  # type: ignore[override]
-                         options: dict, *args) -> BlueprintSetupState:
+    def make_setup_state(self, app: App, options: dict, *args) -> BlueprintSetupState:
         """Stores creation state for deferred initialization."""
         state = super().make_setup_state(app, options, *args)
+        ms = t.cast(TechMicroService, app)
 
         # Defer blueprint route initialization.
         if not options.get('hide_routes', False):
             func = partial(TechMicroService.add_coworks_routes, state.app, state)
-            app.deferred_init_routes_functions = itertools.chain(app.deferred_init_routes_functions, (func,))
+            ms.deferred_init_routes_functions = itertools.chain(ms.deferred_init_routes_functions, (func,))
 
         return state
 

@@ -21,8 +21,8 @@ class TechMicroServiceOperator(BaseOperator):
     template_fields = ["cws_name", "headers", "entry", "query_params", "json", "data"]
 
     def __init__(self, *, cws_name: str = None, entry: str = '/', method: str = 'get', no_auth: bool = False,
-                 query_params: t.Union[dict, str] = None, json: t.Union[dict, str] = None,
-                 data: t.Union[dict, str] = None,
+                 query_params: dict | str | None = None, json: dict | str | None = None,
+                 data: dict | str | None = None,
                  stage: str = None, api_id: str = None, token: str = None,
                  raise_errors: bool = True, raise_400_errors: bool = True,
                  accept: str = 'application/json', headers: dict = None, log_response: bool = False,
@@ -192,7 +192,7 @@ class TechMicroServiceOperator(BaseOperator):
 
 class AsyncTechServicePullOperator(BaseOperator):
 
-    def __init__(self, *, cws_task_id: str = None, aws_conn_id: str = 'aws_s3',
+    def __init__(self, *, cws_task_id: str | None = None, aws_conn_id: str = 'aws_s3',
                  raise_errors: bool = True, raise_400_errors: bool = True,
                  xcom_push: bool = True, **kwargs) -> None:
         """Pull in XCom a microservice result when its was called asynchronously.

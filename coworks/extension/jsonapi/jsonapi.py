@@ -4,8 +4,6 @@ from functools import update_wrapper
 from inspect import Parameter
 from inspect import signature
 
-from coworks import TechMicroService
-from coworks import request
 from flask import current_app
 from flask import make_response
 from jsonapi_pydantic.v1_0 import Error
@@ -17,11 +15,15 @@ from jsonapi_pydantic.v1_0 import ResourceIdentifier
 from jsonapi_pydantic.v1_0 import TopLevel
 from pydantic import ValidationError
 from pydantic.networks import HttpUrl
+from sqlalchemy.exc import MultipleResultsFound
+from sqlalchemy.exc import NoResultFound
 from werkzeug.exceptions import BadRequest
 from werkzeug.exceptions import HTTPException
 from werkzeug.exceptions import InternalServerError
 from werkzeug.exceptions import NotFound
 
+from coworks import TechMicroService
+from coworks import request
 from .data import JsonApiDataMixin
 from .data import JsonApiRelationship
 from .fetching import create_fetching_context_proxy
@@ -260,17 +262,18 @@ def get_toplevel_from_query(query: Query, ensure_one: bool) -> TopLevel:
     def get_toplevel():
         current_app.logger.debug(str(query))
         if ensure_one:
-            all_resources: list[JsonApiDataMixin] = query.all()
-            if len(all_resources) != 1:
+            try:
+                resource: JsonApiDataMixin = query.one()
+            except (NoResultFound, MultipleResultsFound):
                 raise NotFound("None or more than one resource found and ensure_one parameters was set")
-            toplevel = toplevel_from_data(all_resources[0])
+            toplevel = toplevel_from_data(resource)
         else:
             pagination: Pagination = query.paginate(page=fetching_context.page, per_page=fetching_context.per_page,
                                                     max_per_page=fetching_context.max_per_page)
             toplevel = toplevel_from_pagination(pagination)
         return toplevel
 
-    # connection manager may be iterabl (must be performed asynchronously)
+    # connection manager may be iterable (should be performed asynchronously)
     if isinstance(fetching_context.connection_manager, t.Iterable):
         _toplevels = []
         for connection_manager in fetching_context.connection_manager:

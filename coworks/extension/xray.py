@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 import traceback
@@ -24,7 +26,7 @@ COWORKS_NAMESPACE = 'coworks'
 
 
 class XRay:
-    def __init__(self, app: "TechMicroService", recorder: "AWSXRayRecorder", name="xray"):
+    def __init__(self, app: TechMicroService, recorder: AWSXRayRecorder, name="xray"):
         self._app = app
         self._recorder = recorder
         self._name = name

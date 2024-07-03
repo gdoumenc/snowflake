@@ -2,6 +2,8 @@ import typing as t
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from sqlalchemy.exc import MultipleResultsFound
+from sqlalchemy.exc import NoResultFound
 
 from .data import CursorPagination
 from .data import JsonApiDataMixin
@@ -24,6 +26,9 @@ class Query(t.Protocol):
         ...
 
     def all(self) -> list[JsonApiDataMixin]:
+        ...
+
+    def one(self) -> JsonApiDataMixin:
         ...
 
 
@@ -50,3 +55,10 @@ class ListQuery(BaseModel):
 
     def all(self) -> list[JsonApiDataMixin]:
         return self.values
+
+    def one(self) -> JsonApiDataMixin:
+        if len(self.values) == 0:
+            raise NoResultFound()
+        if len(self.values) > 1:
+            raise MultipleResultsFound()
+        return self.values[0]
