@@ -14,9 +14,8 @@ from werkzeug.exceptions import NotFound
 from coworks import TechMicroService
 from coworks.extension.xray import XRay
 from .jsonapi import JsonApiDataMixin
+from .jsonapi import JsonApiDict
 from .jsonapi.data import CursorPagination
-from .jsonapi.data import JsonApiBaseModel
-from .jsonapi.data import JsonApiDict
 
 
 class OdooConfig(BaseModel):
@@ -115,7 +114,7 @@ class OdooQuery(BaseModel):
 
     def odoo_execute_kw(self, params):
         res = self.odoo.odoo_execute_kw(self.model, self.method, [self.domain], params, bind_key=self.bind_key)
-        return [self.odoo.basemodels.get(self.model, JsonApiDict)(**rec) for rec in res]  # type: ignore[operator]
+        return [self.odoo.get_basemodel(self.model, rec)(**rec) for rec in res]  # type: ignore[operator]
 
 
 class Odoo:
@@ -145,8 +144,8 @@ class Odoo:
         if config:
             self.binds[None] = config
 
-        # jsonapi basemodel association from an odoo model
-        self.basemodels: dict[str, JsonApiBaseModel] = {}
+        # jsonapi basemodel association from an odoo model and odoo record
+        self.get_basemodel = lambda model, record: JsonApiDict
 
         if app:
             self.init_app(app)
