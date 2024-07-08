@@ -128,7 +128,7 @@ class JsonApiBaseModel(BaseModel, JsonApiDataMixin):
             return False
         if isinstance(v, JsonApiBaseModel):
             return True
-        if self._is_list_or_set(v) and isinstance(v[0], JsonApiBaseModel):
+        if self._is_list_or_set(v) and isinstance(next(iter(v)), JsonApiBaseModel):
             return True
         return False
 
