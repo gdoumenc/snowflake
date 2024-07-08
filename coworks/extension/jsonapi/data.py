@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import typing as t
 from math import ceil
+from typing import overload
 
 from pydantic import BaseModel
 from pydantic import field_validator
@@ -59,13 +62,13 @@ class JsonApiRelationship:
     The id may be given independently of the value.
     """
 
-    def __init__(self, *, type_, id_, value=None):
+    def __init__(self, *, type_, id_, value: JsonApiDataMixin | None = None):
         self.jsonapi_type = type_
         self.jsonapi_id = id_
         self.value = value
 
     @property
-    def resource_value(self) -> "JsonApiDataMixin":
+    def resource_value(self) -> JsonApiDataMixin | None:
         return self.value
 
 
@@ -85,8 +88,8 @@ class JsonApiDataMixin:
     def jsonapi_self_link(self):
         return "https://monsite.com/missing_entry"
 
-    def jsonapi_attributes(self, context: 'FetchingContext', with_relationships: list[str] | None = None) \
-            -> tuple[dict[str, t.Any], dict[str, 'JsonApiRelationship']]:
+    def jsonapi_attributes(self, context: FetchingContext, with_relationships: set[str] | None = None) \
+            -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
         """Splits the structure in attributes versus relationships."""
         return {}, {}
 
@@ -94,11 +97,43 @@ class JsonApiDataMixin:
 class JsonApiBaseModel(BaseModel, JsonApiDataMixin):
     """BaseModel data for JSON:API resource"""
 
-    def jsonapi_attributes(self, context: "FetchingContext", with_relationships: list[str] | None = None) \
-            -> tuple[dict[str, t.Any], dict[str, 'JsonApiRelationship']]:
+    def jsonapi_attributes(self, context: FetchingContext, with_relationships: set[str] | None = None) \
+            -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
+        with_relationships = with_relationships or set()
         fields = context.field_names(self.jsonapi_type)
-        attrs = {k: v for k, v in self.model_dump().items() if (not fields or k in fields)}  # type:ignore
-        return attrs, {}
+        attrs: dict[str, t.Any] = {}
+        rels: dict[str, list[JsonApiRelationship] | JsonApiRelationship] = {}
+        for k, v in self:
+            if self._is_basemodel(v):
+                rels[k] = self.create_relationship(v)
+            elif not fields or k in fields:
+                attrs[k] = v
+        return attrs, rels
+
+    @overload
+    def create_relationship(self, value: JsonApiBaseModel) -> JsonApiRelationship:
+        ...
+
+    @overload
+    def create_relationship(self, value: list[JsonApiBaseModel]) -> list[JsonApiRelationship]:
+        ...
+
+    def create_relationship(self, value):
+        if self._is_list_or_set(value):
+            return [self.create_relationship(x) for x in value]
+        return JsonApiRelationship(type_=value.jsonapi_type, id_=value.jsonapi_id, value=value)
+
+    def _is_basemodel(self, v) -> bool:
+        if not v:
+            return False
+        if isinstance(v, JsonApiBaseModel):
+            return True
+        if self._is_list_or_set(v) and isinstance(v[0], JsonApiBaseModel):
+            return True
+        return False
+
+    def _is_list_or_set(self, v):
+        return isinstance(v, list) or isinstance(v, set)
 
 
 class JsonApiDict(dict, JsonApiDataMixin):
@@ -112,8 +147,8 @@ class JsonApiDict(dict, JsonApiDataMixin):
     def jsonapi_id(self) -> str:
         return str(self['id'])
 
-    def jsonapi_attributes(self, context: "FetchingContext", with_relationships: list[str] | None = None) \
-            -> tuple[dict[str, t.Any], dict[str, 'JsonApiRelationship']]:
+    def jsonapi_attributes(self, context: FetchingContext, with_relationships: set[str] | None = None) \
+            -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
         fields = context.field_names(self.jsonapi_type)
         attrs = {k: v for k, v in self.items() if (not fields or k in fields)}  # type:ignore
         return attrs, {}

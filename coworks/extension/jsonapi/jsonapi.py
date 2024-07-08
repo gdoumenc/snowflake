@@ -194,8 +194,8 @@ def jsonapi(func):
 
 
 def to_ressource_data(jsonapi_data: JsonApiDataMixin, *,
-                      included_prefix: str | None = None, with_relationships: list[str] | None = None) -> dict[
-    str, t.Any]:
+                      included_prefix: str | None = None, with_relationships: set[str] | None = None) \
+        -> dict[str, t.Any]:
     """Transform a simple structure data into a jsonapi ressource data.
 
     Beware : included is a dict of type/id key and jsonapi ressource value
@@ -372,7 +372,7 @@ def add_to_included(included, key, res: JsonApiRelationship, *, to_be_included, 
 
 def get_relationships_to_add_in_included(new_included_prefix):
     """Returns the relationships to add from the include fetching context.
-    Get only attributesd key with the new included prefix and no more.
+    Get only attributes key with the new included prefix and no more.
 
     :param new_included_prefix: the new prefix of ressources."""
     prefixed_include = [i[len(new_included_prefix):] for i in fetching_context.include
