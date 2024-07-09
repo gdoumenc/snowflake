@@ -387,12 +387,6 @@ def _add_to_included(included, key, res: JsonApiRelationship, *, prefix, include
                                              include=include, exclude=exclude)
             included[res_key] = res_included
 
-            # Moves included resources defined in thi containing included resource
-            if 'included' in res_included:
-                for k, v in res_included.pop('included').items():
-                    included[k] = v
-
-
 def _remove_prefix(set_names: set[str], prefix: str) -> set[str]:
     new_set_names = [i[len(prefix):] for i in set_names if i.startswith(prefix)]
     return {n for n in new_set_names if '.' not in n}
