@@ -168,7 +168,7 @@ def jsonapi(func):
         code = 200
         try:
             if isinstance(res, Query):
-                _toplevel = get_toplevel_from_query(res, ensure_one)
+                _toplevel = get_toplevel_from_query(res, ensure_one=ensure_one)
             elif isinstance(res, TopLevel):
                 _toplevel = res
             else:
@@ -193,19 +193,24 @@ def jsonapi(func):
     return _jsonapi
 
 
-def to_ressource_data(jsonapi_data: JsonApiDataMixin, *,
-                      included_prefix: str | None = None, with_relationships: set[str] | None = None) \
-        -> dict[str, t.Any]:
+def to_ressource_data(jsonapi_data: JsonApiDataMixin, *, included: dict[str, dict], prefix: str | None = None,
+                      include: set[str] | None = None, exclude: set[str] | None = None) -> dict[str, t.Any]:
     """Transform a simple structure data into a jsonapi ressource data.
 
     Beware : included is a dict of type/id key and jsonapi ressource value
     :param jsonapi_data: the data to transform.
     :param included_prefix: the prefix of the included resources (indirect inclusion)
     """
+    prefix = prefix or ''
+    include = include or set()
+    exclude = exclude or set()
 
     # set resource data from basemodel
     _type = jsonapi_data.jsonapi_type
-    attrs, rels = jsonapi_data.jsonapi_attributes(fetching_context)
+    attrs, rels = jsonapi_data.jsonapi_attributes(
+        include=_remove_prefix(include, prefix), exclude=_remove_prefix(exclude, prefix)
+    )
+    include = include or set(rels) - exclude
     if 'type' in attrs:
         _type = attrs.pop('type')
     else:
@@ -217,15 +222,14 @@ def to_ressource_data(jsonapi_data: JsonApiDataMixin, *,
 
     # get related resources relationships
     relationships: dict[str, Relationship] = {}
-    included: dict[str, dict] = {}
-    if included_prefix:
-        to_be_included = [k[len(included_prefix):] for k in fetching_context.include or [] if included_prefix in k]
+    if prefix:
+        to_be_excluded = [k[len(prefix):] for k in exclude if prefix in k]
     else:
-        to_be_included = [k for k in fetching_context.include or [] if '.' not in k]
+        to_be_excluded = [k for k in exclude or [] if '.' not in k]
 
     # add relationship and included resources if needed
     for key, rel in rels.items():
-        if rel is None:
+        if key in to_be_excluded or rel is None:
             continue
 
         if isinstance(rel, list):
@@ -233,11 +237,11 @@ def to_ressource_data(jsonapi_data: JsonApiDataMixin, *,
             for val in rel:
                 res_id = get_resource_identifier(val)
                 res_ids.append(res_id)
-                add_to_included(included, key, val, to_be_included=to_be_included, included_prefix=included_prefix)
+                _add_to_included(included, key, val, include=include, exclude=exclude, prefix=prefix)
             relationships[key] = Relationship(data=res_ids)
         else:
             res_id = get_resource_identifier(rel)
-            add_to_included(included, key, rel, to_be_included=to_be_included, included_prefix=included_prefix)
+            _add_to_included(included, key, rel, include=include, exclude=exclude, prefix=prefix)
             relationships[key] = Relationship(data=res_id)
 
     resource_data = {
@@ -256,8 +260,17 @@ def to_ressource_data(jsonapi_data: JsonApiDataMixin, *,
     return resource_data
 
 
-def get_toplevel_from_query(query: Query, ensure_one: bool) -> TopLevel:
-    """Returns the Toplevel structure from the query."""
+def get_toplevel_from_query(query: Query, *, ensure_one: bool, include: set[str] | None = None,
+                            exclude: set[str] | None = None) -> TopLevel:
+    """Returns the Toplevel structure from the query.
+
+    :param query: the fetched query.
+    :param ensure_one: whether to ensure that only one Toplevel instance is returned (else raises NotFound)
+    :param include: an optional set of included resources
+    :param exclude: an optional set of excluded resources
+    """
+    include = fetching_context.include | (include or set())
+    exclude = exclude or set()
 
     def get_toplevel():
         current_app.logger.debug(str(query))
@@ -266,11 +279,11 @@ def get_toplevel_from_query(query: Query, ensure_one: bool) -> TopLevel:
                 resource: JsonApiDataMixin = query.one()
             except (NoResultFound, MultipleResultsFound):
                 raise NotFound("None or more than one resource found and ensure_one parameters was set")
-            toplevel = toplevel_from_data(resource)
+            toplevel = toplevel_from_data(resource, include=include, exclude=exclude)
         else:
             pagination: Pagination = query.paginate(page=fetching_context.page, per_page=fetching_context.per_page,
                                                     max_per_page=fetching_context.max_per_page)
-            toplevel = toplevel_from_pagination(pagination)
+            toplevel = toplevel_from_pagination(pagination, include=include, exclude=exclude)
         return toplevel
 
     # connection manager may be iterable (should be performed asynchronously)
@@ -293,29 +306,36 @@ def get_toplevel_from_query(query: Query, ensure_one: bool) -> TopLevel:
         return get_toplevel()
 
 
-def toplevel_from_data(res: JsonApiDataMixin):
+def toplevel_from_data(res: JsonApiDataMixin, include: set[str], exclude: set[str]):
     """Transform a simple structure data into a toplevel jsonapi.
 
     :param res: the data to transform.
+    :param include: set of included resources
+    :param exclude: set of excluded resources
     """
-    data = to_ressource_data(res)
-    included: dict = data.pop('included', {})
+    included: dict[str, dict] = {}
+    filtered_fields = fetching_context.field_names(res.jsonapi_type) | include
+    data = to_ressource_data(res, included=included, include=filtered_fields, exclude=exclude)
     resources = Resource(**data)
     included_resources = [Resource(**i) for i in included.values()]
     return TopLevel(data=resources, included=included_resources if included else None)
 
 
-def toplevel_from_pagination(pagination: Pagination):
+def toplevel_from_pagination(pagination: Pagination, include: set[str], exclude: set[str]):
     """Transform an iterable pagination into a toplevel jsonapi.
 
     :param pagination: the data to transform.
+    :param include: set of included resources
+    :param exclude: set of excluded resources
     """
-    data = [to_ressource_data(d) for d in t.cast(t.Iterable, pagination)]
-    included: list[dict] = [d.pop('included') for d in data if 'included' in d]
+    included: dict[str, dict] = {}
+    data = []
+    for d in t.cast(t.Iterable, pagination):
+        filtered_fields = fetching_context.field_names(d.jsonapi_type) | include
+        data.append(to_ressource_data(d, included=included, include=filtered_fields, exclude=exclude))
     resources = [Resource(**d) for d in data]
-    included_resources = {k: Resource(**d) for i in included for k, d in
-                          i.items()}  # use dict to avoid same included resource
-    toplevel = TopLevel(data=resources, included=included_resources.values() if included else None)
+    included_resources = [Resource(**i) for i in included.values()]
+    toplevel = TopLevel(data=resources, included=included_resources if included else None)
     fetching_context.add_pagination(toplevel, pagination)
     return toplevel
 
@@ -346,35 +366,35 @@ def get_resource_links(jsonapi_basemodel) -> dict:
     raise InternalServerError("Unexpected jsonapi_self_link value")
 
 
-def add_to_included(included, key, res: JsonApiRelationship, *, to_be_included, included_prefix):
+def _add_to_included(included, key, res: JsonApiRelationship, *, prefix, include, exclude):
     """Adds the resource defined at key to the included list of resource.
     
     :param included: list of included resources to increment (if not already inside).
     :param key: the key where the resource is in the parent resource.
     :param res: the relationship to include.
-    :param to_be_included: the list of keys to include in the included list of resources.
+    :param include: set of included resources
+    :param exclude: set of excluded resources
     :param included_prefix: dot separated path in resource.
     """
     res_key = res.jsonapi_type + res.jsonapi_id
-    if key in to_be_included and res_key not in included:
-        new_included_prefix = f"{included_prefix}{key}." if included_prefix else f"{key}."
-        with_relationships = get_relationships_to_add_in_included(new_included_prefix)
+    if key in include and key not in exclude and res_key not in included:
         if res.resource_value:
-            res_included = to_ressource_data(res.resource_value, included_prefix=new_included_prefix,
-                                             with_relationships=with_relationships)
+            included[res_key] = None
+
+            # Creates and includes the resource
+            new_prefix = f"{prefix}{key}." if prefix else f"{key}."
+            new_include = _remove_prefix(include, new_prefix)
+            new_exclude = _remove_prefix(exclude, new_prefix)
+            res_included = to_ressource_data(res.resource_value, included=included, prefix=new_prefix,
+                                             include=new_include, exclude=new_exclude)
             included[res_key] = res_included
 
-            # Moves included ressources defined in this included ressource
+            # Moves included resources defined in thi containing included resource
             if 'included' in res_included:
                 for k, v in res_included.pop('included').items():
                     included[k] = v
 
 
-def get_relationships_to_add_in_included(new_included_prefix):
-    """Returns the relationships to add from the include fetching context.
-    Get only attributes key with the new included prefix and no more.
-
-    :param new_included_prefix: the new prefix of ressources."""
-    prefixed_include = [i[len(new_included_prefix):] for i in fetching_context.include
-                        if i.startswith(new_included_prefix)]
-    return [i for i in prefixed_include if '.' not in i]
+def _remove_prefix(set_names: set[str], prefix: str) -> set[str]:
+    new_set_names = [i[len(prefix):] for i in set_names if i.startswith(prefix)]
+    return {n for n in new_set_names if '.' not in n}

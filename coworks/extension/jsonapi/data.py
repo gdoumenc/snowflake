@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import typing as t
-from math import ceil
 from typing import overload
 
+from math import ceil
 from pydantic import BaseModel
 from pydantic import field_validator
-
-if t.TYPE_CHECKING:
-    from .fetching import FetchingContext
 
 
 class CursorPagination(BaseModel):
@@ -88,7 +85,7 @@ class JsonApiDataMixin:
     def jsonapi_self_link(self):
         return "https://monsite.com/missing_entry"
 
-    def jsonapi_attributes(self, context: FetchingContext) \
+    def jsonapi_attributes(self, include: set[str], exclude: set[str]) \
             -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
         """Splits the structure in attributes versus relationships."""
         return {}, {}
@@ -97,15 +94,14 @@ class JsonApiDataMixin:
 class JsonApiBaseModel(BaseModel, JsonApiDataMixin):
     """BaseModel data for JSON:API resource"""
 
-    def jsonapi_attributes(self, context: FetchingContext) \
+    def jsonapi_attributes(self, include: set[str], exclude: set[str]) \
             -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
-        fields = context.field_names(self.jsonapi_type)
         attrs: dict[str, t.Any] = {}
         rels: dict[str, list[JsonApiRelationship] | JsonApiRelationship] = {}
         for k, v in self:
             if self._is_basemodel(v):
                 rels[k] = self.create_relationship(v)
-            elif not fields or k in fields:
+            elif not include or k in include:
                 attrs[k] = v
         return attrs, rels
 
@@ -146,8 +142,7 @@ class JsonApiDict(dict, JsonApiDataMixin):
     def jsonapi_id(self) -> str:
         return str(self['id'])
 
-    def jsonapi_attributes(self, context: FetchingContext) \
+    def jsonapi_attributes(self, include: set[str], exclude: set[str]) \
             -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
-        fields = context.field_names(self.jsonapi_type)
-        attrs = {k: v for k, v in self.items() if (not fields or k in fields)}  # type:ignore
+        attrs = {k: v for k, v in self.items() if (not include or k in include)}
         return attrs, {}
