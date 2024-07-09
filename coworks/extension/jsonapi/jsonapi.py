@@ -205,7 +205,7 @@ def to_ressource_data(jsonapi_data: JsonApiDataMixin, *,
 
     # set resource data from basemodel
     _type = jsonapi_data.jsonapi_type
-    attrs, rels = jsonapi_data.jsonapi_attributes(fetching_context, with_relationships)
+    attrs, rels = jsonapi_data.jsonapi_attributes(fetching_context)
     if 'type' in attrs:
         _type = attrs.pop('type')
     else:

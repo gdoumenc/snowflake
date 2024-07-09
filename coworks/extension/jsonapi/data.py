@@ -88,7 +88,7 @@ class JsonApiDataMixin:
     def jsonapi_self_link(self):
         return "https://monsite.com/missing_entry"
 
-    def jsonapi_attributes(self, context: FetchingContext, with_relationships: set[str] | None = None) \
+    def jsonapi_attributes(self, context: FetchingContext) \
             -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
         """Splits the structure in attributes versus relationships."""
         return {}, {}
@@ -97,9 +97,8 @@ class JsonApiDataMixin:
 class JsonApiBaseModel(BaseModel, JsonApiDataMixin):
     """BaseModel data for JSON:API resource"""
 
-    def jsonapi_attributes(self, context: FetchingContext, with_relationships: set[str] | None = None) \
+    def jsonapi_attributes(self, context: FetchingContext) \
             -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
-        with_relationships = with_relationships or set()
         fields = context.field_names(self.jsonapi_type)
         attrs: dict[str, t.Any] = {}
         rels: dict[str, list[JsonApiRelationship] | JsonApiRelationship] = {}
@@ -147,7 +146,7 @@ class JsonApiDict(dict, JsonApiDataMixin):
     def jsonapi_id(self) -> str:
         return str(self['id'])
 
-    def jsonapi_attributes(self, context: FetchingContext, with_relationships: set[str] | None = None) \
+    def jsonapi_attributes(self, context: FetchingContext) \
             -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
         fields = context.field_names(self.jsonapi_type)
         attrs = {k: v for k, v in self.items() if (not fields or k in fields)}  # type:ignore
