@@ -377,16 +377,14 @@ def _add_to_included(included, key, res: JsonApiRelationship, *, prefix, include
     :param included_prefix: dot separated path in resource.
     """
     res_key = res.jsonapi_type + res.jsonapi_id
-    if key in include and key not in exclude and res_key not in included:
+    if res_key not in included:
         if res.resource_value:
             included[res_key] = None
 
             # Creates and includes the resource
             new_prefix = f"{prefix}{key}." if prefix else f"{key}."
-            new_include = _remove_prefix(include, new_prefix)
-            new_exclude = _remove_prefix(exclude, new_prefix)
             res_included = to_ressource_data(res.resource_value, included=included, prefix=new_prefix,
-                                             include=new_include, exclude=new_exclude)
+                                             include=include, exclude=exclude)
             included[res_key] = res_included
 
             # Moves included resources defined in thi containing included resource
