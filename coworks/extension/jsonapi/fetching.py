@@ -271,7 +271,7 @@ def str_sql_filter(jsonapi_type, key, column, oper, value) -> list[ColumnOperato
     if oper == 'eq':
         return [column.in_(value)]
     if oper == 'ilike':
-        return [column.ilike(str(v)) for v in value]
+        return [column.ilike('%' + str(v) + '%') for v in value]
     if oper == 'contains':
         return [column.contains(str(v)) for v in value]
     msg = f"Undefined operator '{oper}' for string value"
