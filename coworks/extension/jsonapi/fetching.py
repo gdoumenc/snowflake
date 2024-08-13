@@ -1,4 +1,5 @@
 import contextlib
+import json
 import typing as t
 from collections import defaultdict
 from datetime import datetime
@@ -140,15 +141,17 @@ class FetchingContext:
                 else:
                     _sql_filters.append(column.in_(value))
             elif isinstance(column.property, RelationshipProperty):
+                if not isinstance(value, list) or len(value) != 1:
+                    msg = (f"Wrong '{value}' value for sql model '{jsonapi_type}'"
+                           " in filters parameters (should be a simple list).")
+                    raise UnprocessableEntity(msg)
+                value = json.loads(value[0])
                 if not isinstance(value, dict):
                     msg = (f"Wrong '{value}' value for sql model '{jsonapi_type}'"
                            " in filters parameters (should be a dict).")
                     raise UnprocessableEntity(msg)
                 for k, v in value.items():
-                    condition = column.has(**{k: v[0]})
-                    if len(v) > 1:
-                        for or_v in v[1:]:
-                            condition = and_(condition, column.has(**{k: or_v}))
+                    condition = column.has(**{k: v})
                     _sql_filters.append(condition)
 
         return _sql_filters
