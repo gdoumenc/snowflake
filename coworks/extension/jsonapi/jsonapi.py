@@ -306,12 +306,12 @@ def get_toplevel_from_query(query: Query, *, ensure_one: bool, include: set[str]
         return get_toplevel()
 
 
-def toplevel_from_data(res: JsonApiDataMixin, include: set[str], exclude: set[str]):
+def toplevel_from_data(res: JsonApiDataMixin, include: set[str], exclude: set[str]) -> TopLevel:
     """Transform a simple structure data into a toplevel jsonapi.
 
-    :param res: the data to transform.
-    :param include: set of included resources
-    :param exclude: set of excluded resources
+    :param res: the data to transform into a toplevel jsonapi structure.
+    :param include: set of included resources.
+    :param exclude: set of excluded resources.
     """
     included: dict[str, dict] = {}
     filtered_fields = fetching_context.field_names(res.jsonapi_type) | include
@@ -386,6 +386,7 @@ def _add_to_included(included, key, res: JsonApiRelationship, *, prefix, include
             res_included = to_ressource_data(res.resource_value, included=included, prefix=new_prefix,
                                              include=include, exclude=exclude)
             included[res_key] = res_included
+
 
 def _remove_prefix(set_names: set[str], prefix: str) -> set[str]:
     new_set_names = [i[len(prefix):] for i in set_names if i.startswith(prefix)]

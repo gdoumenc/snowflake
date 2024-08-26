@@ -13,7 +13,6 @@ from sqlalchemy import inspect
 from sqlalchemy import not_
 from sqlalchemy.orm import ColumnProperty
 from sqlalchemy.orm import RelationshipProperty
-from sqlalchemy.sql import and_
 from werkzeug.exceptions import UnprocessableEntity
 from werkzeug.local import LocalProxy
 
