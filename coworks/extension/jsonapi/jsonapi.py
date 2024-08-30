@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from pydantic.networks import HttpUrl
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.exc import NoResultFound
+from sqlalchemy import ScalarResult
 from werkzeug.exceptions import BadRequest
 from werkzeug.exceptions import HTTPException
 from werkzeug.exceptions import InternalServerError
@@ -169,6 +170,8 @@ def jsonapi(func):
         try:
             if isinstance(res, Query):
                 _toplevel = get_toplevel_from_query(res, ensure_one=ensure_one)
+            elif isinstance(res, ScalarResult):
+                _toplevel = get_toplevel_from_query(res, ensure_one=True)
             elif isinstance(res, TopLevel):
                 _toplevel = res
             else:

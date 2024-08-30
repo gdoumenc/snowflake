@@ -4,6 +4,9 @@ import typing as t
 from collections import defaultdict
 from datetime import datetime
 
+from coworks import request
+from coworks.utils import nr_url
+from coworks.utils import str_to_bool
 from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import TopLevel
 from pydantic.networks import HttpUrl
@@ -16,9 +19,6 @@ from sqlalchemy.orm import RelationshipProperty
 from werkzeug.exceptions import UnprocessableEntity
 from werkzeug.local import LocalProxy
 
-from coworks import request
-from coworks.utils import nr_url
-from coworks.utils import str_to_bool
 from .data import JsonApiBaseModel
 from .data import JsonApiDataMixin
 from .query import Pagination
@@ -162,6 +162,7 @@ class FetchingContext:
         insp = inspect(sql_model)
         _sql_order_by = []
         for key in self._sort:
+            column = None
             asc_sort = False
             if key.startswith('-'):
                 asc_sort = True
@@ -174,7 +175,7 @@ class FetchingContext:
                     column = insp.all_orm_descriptors[key]
                     raise UnprocessableEntity("Sort on relationship is not implemented")
                 else:
-                    raise UnprocessableEntity(f"Undefined sort key {key} on model {sql_model}")
+                    raise UnprocessableEntity(f"Undefined sort key '{key}' on model '{sql_model}'")
 
             # sort on column attributes
             elif key in insp.column_attrs:
@@ -182,6 +183,8 @@ class FetchingContext:
                 if asc_sort:
                     column = desc(column)
 
+            if column is None:
+                raise UnprocessableEntity(f"Undefined sort key '{key}' on model '{sql_model}'")
             _sql_order_by.append(column)
         return _sql_order_by
 
