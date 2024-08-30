@@ -211,8 +211,8 @@ class CoworksRequest(FlaskRequest):
             self.__stream = io.BytesIO(base64.b64decode(self.aws_body))
         elif self.is_form_urlencoded and isinstance(self.aws_body, str):
             self.__stream = io.BytesIO(self.aws_body.encode('ascii'))
-        elif is_json(self.mimetype) and isinstance(self.aws_body, bytes):
-            self.__stream = io.BytesIO(self.aws_body)
+        elif is_json(self.mimetype) and isinstance(self.aws_body, dict):
+            self.__stream = io.BytesIO(json.dumps(self.aws_body).encode('ascii'))
         else:
             raise BadRequest(f'Undefined mime-type for stream body: {self.mimetype} ({type(self.aws_body)})')
 
