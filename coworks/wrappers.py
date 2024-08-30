@@ -21,6 +21,8 @@ from werkzeug.exceptions import MethodNotAllowed
 from werkzeug.exceptions import NotFound
 from werkzeug.routing import MapAdapter
 
+from .utils import is_json
+
 
 class TokenResponse:
     """AWS authorization response."""
@@ -209,8 +211,10 @@ class CoworksRequest(FlaskRequest):
             self.__stream = io.BytesIO(base64.b64decode(self.aws_body))
         elif self.is_form_urlencoded and isinstance(self.aws_body, str):
             self.__stream = io.BytesIO(self.aws_body.encode('ascii'))
+        elif is_json(self.mimetype) and isinstance(self.aws_body, bytes):
+            self.__stream = io.BytesIO(self.aws_body)
         else:
-            raise BadRequest(f'Undefined mime-type for stream body: {self.mimetype}')
+            raise BadRequest(f'Undefined mime-type for stream body: {self.mimetype} ({type(self.aws_body)})')
 
         if self.is_multipart:
             self.__files = MultiDict()

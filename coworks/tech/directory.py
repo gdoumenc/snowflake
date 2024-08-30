@@ -18,7 +18,7 @@ from werkzeug.exceptions import NotFound
 
 from coworks import TechMicroService
 from coworks import entry
-from coworks.utils import is_json
+from utils import is_json
 
 
 class DirectoryMicroService(TechMicroService):

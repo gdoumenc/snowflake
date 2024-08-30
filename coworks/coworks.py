@@ -30,17 +30,17 @@ from werkzeug.exceptions import Unauthorized
 from werkzeug.routing import Rule
 
 from .globals import request
-from .utils import BIZ_BUCKET_HEADER_KEY
-from .utils import BIZ_KEY_HEADER_KEY
-from .utils import HTTP_METHODS
-from .utils import create_cws_proxy
+from .const import BIZ_BUCKET_HEADER_KEY
+from .const import BIZ_KEY_HEADER_KEY
+from .proxy import HTTP_METHODS
+from .proxy import create_cws_proxy
 from .utils import get_app_stage
-from .utils import get_cws_annotations
-from .utils import is_arg_parameter
-from .utils import is_kwarg_parameter
-from .utils import make_absolute
-from .utils import path_join
-from .utils import trim_underscores
+from .proxy import get_cws_annotations
+from .proxy import is_arg_parameter
+from .proxy import is_kwarg_parameter
+from .proxy import make_absolute
+from .proxy import path_join
+from .proxy import trim_underscores
 from .wrappers import CoworksMapAdapter
 from .wrappers import CoworksRequest
 from .wrappers import CoworksResponse

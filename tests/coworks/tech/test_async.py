@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 
 from coworks import TechMicroService
 from coworks import entry
-from coworks.utils import BIZ_BUCKET_HEADER_KEY
-from coworks.utils import BIZ_KEY_HEADER_KEY
+from coworks.const import BIZ_BUCKET_HEADER_KEY
+from coworks.const import BIZ_KEY_HEADER_KEY
 from ..event import get_event
 
 

@@ -32,7 +32,7 @@ from pydantic import ConfigDict
 from werkzeug.routing import Rule
 
 from coworks import aws
-from coworks.utils import get_cws_annotations
+from coworks.proxy import get_cws_annotations
 from coworks.utils import load_dotenv
 from .command import CwsCommand
 from .utils import progressbar

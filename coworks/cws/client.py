@@ -15,8 +15,8 @@ from click import UsageError
 from flask.cli import ScriptInfo
 
 from coworks import __version__
-from coworks.utils import DEFAULT_PROJECT_DIR
-from coworks.utils import PROJECT_CONFIG_VERSION
+from coworks.const import DEFAULT_PROJECT_DIR
+from coworks.const import PROJECT_CONFIG_VERSION
 from .deploy import deploy_command
 from .deploy import deployed_command
 from .deploy import destroy_command

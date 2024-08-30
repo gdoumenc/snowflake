@@ -20,7 +20,7 @@ from werkzeug.exceptions import NotFound
 
 from coworks import Blueprint
 from coworks import entry
-from coworks.utils import get_cws_annotations
+from coworks.proxy import get_cws_annotations
 
 
 class Admin(Blueprint):

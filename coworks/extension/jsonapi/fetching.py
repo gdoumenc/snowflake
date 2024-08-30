@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from coworks import request
-from coworks.utils import nr_url
+from coworks.proxy import nr_url
 from coworks.utils import str_to_bool
 from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import TopLevel
