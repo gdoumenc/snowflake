@@ -21,6 +21,12 @@ class Pagination(t.Protocol, t.Iterable):
 
 
 @t.runtime_checkable
+class Scalar(t.Protocol):
+    def one(self) -> JsonApiDataMixin:
+        ...
+
+
+@t.runtime_checkable
 class Query(t.Protocol):
     def paginate(self, *, page, per_page, max_per_page) -> Pagination:
         ...

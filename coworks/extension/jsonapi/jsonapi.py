@@ -15,9 +15,9 @@ from jsonapi_pydantic.v1_0 import ResourceIdentifier
 from jsonapi_pydantic.v1_0 import TopLevel
 from pydantic import ValidationError
 from pydantic.networks import HttpUrl
+from sqlalchemy import ScalarResult
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.exc import NoResultFound
-from sqlalchemy import ScalarResult
 from werkzeug.exceptions import BadRequest
 from werkzeug.exceptions import HTTPException
 from werkzeug.exceptions import InternalServerError
@@ -31,6 +31,7 @@ from .fetching import create_fetching_context_proxy
 from .fetching import fetching_context
 from .query import Pagination
 from .query import Query
+from .query import Scalar
 
 
 class JsonApiError(Exception):
@@ -263,7 +264,7 @@ def to_ressource_data(jsonapi_data: JsonApiDataMixin, *, included: dict[str, dic
     return resource_data
 
 
-def get_toplevel_from_query(query: Query, *, ensure_one: bool, include: set[str] | None = None,
+def get_toplevel_from_query(query: Query | Scalar, *, ensure_one: bool, include: set[str] | None = None,
                             exclude: set[str] | None = None) -> TopLevel:
     """Returns the Toplevel structure from the query.
 
@@ -284,6 +285,8 @@ def get_toplevel_from_query(query: Query, *, ensure_one: bool, include: set[str]
                 raise NotFound("None or more than one resource found and ensure_one parameters was set")
             toplevel = toplevel_from_data(resource, include=include, exclude=exclude)
         else:
+            if isinstance(query, Scalar):
+                raise InternalServerError("The query must be a Query if ensure_one is set to True.")
             pagination: Pagination = query.paginate(page=fetching_context.page, per_page=fetching_context.per_page,
                                                     max_per_page=fetching_context.max_per_page)
             toplevel = toplevel_from_pagination(pagination, include=include, exclude=exclude)
