@@ -4,8 +4,6 @@ from functools import update_wrapper
 from inspect import Parameter
 from inspect import signature
 
-from coworks import TechMicroService
-from coworks import request
 from flask import current_app
 from flask import make_response
 from jsonapi_pydantic.v1_0 import Error
@@ -25,6 +23,8 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.exceptions import InternalServerError
 from werkzeug.exceptions import NotFound
 
+from coworks import TechMicroService
+from coworks import request
 from .data import JsonApiDataMixin
 from .data import JsonApiRelationship
 from .fetching import create_fetching_context_proxy
@@ -87,10 +87,12 @@ class JsonApi:
             try:
                 return handle_http_exception(e)
             except JsonApiError as e:
-                return self._toplevel_error_response(e.errors)
+                self.capture_exception(e)
+                return _toplevel_error_response(e.errors)
             except HTTPException as e:
+                self.capture_exception(e)
                 errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
-                return self._toplevel_error_response(errors, status_code=e.code)
+                return _toplevel_error_response(errors, status_code=e.code)
 
         def _handle_user_exception(e):
             if 'application/vnd.api+json' not in request.headers.getlist('accept'):
@@ -99,22 +101,27 @@ class JsonApi:
             try:
                 return handle_user_exception(e)
             except JsonApiError as e:
-                return self._toplevel_error_response(e.errors)
+                self.capture_exception(e)
+                return _toplevel_error_response(e.errors)
             except ValidationError as e:
-                app.full_logger_error(e)
+                self.capture_exception(e)
                 errors = [Error(id="", status=BadRequest.code, code=err['type'],
                                 links=ErrorLinks(about=err['url']),  # type: ignore[typeddict-item]
                                 title=err['msg'], detail=str(err['loc'])) for err in e.errors()]
                 errors.append(Error(id="", status=BadRequest.code, title=e.title, detail=str(e)))
-                return self._toplevel_error_response(errors, status_code=BadRequest.code)
+                return _toplevel_error_response(errors, status_code=BadRequest.code)
             except HTTPException as e:
+                self.capture_exception(e)
                 errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
-                return self._toplevel_error_response(errors, status_code=e.code)
+                return _toplevel_error_response(errors, status_code=e.code)
             except Exception as e:
-                app.full_logger_error(e)
+                self.capture_exception(e)
                 errors = [Error(id=e.__class__.__name__, title=e.__class__.__name__, detail=str(e),
                                 status=InternalServerError.code)]
-                return self._toplevel_error_response(errors, status_code=InternalServerError.code)
+                return _toplevel_error_response(errors, status_code=InternalServerError.code)
+
+        def capture_exception(e):
+            app.full_logger_error(e)
 
         app.handle_http_exception = _handle_http_exception
         app.handle_user_exception = _handle_user_exception
@@ -125,14 +132,6 @@ class JsonApi:
         if 'application/vnd.api+json' not in request.headers.getlist('accept'):
             return response
 
-        response.content_type = 'application/vnd.api+json'
-        return response
-
-    def _toplevel_error_response(self, errors, *, status_code=None):
-        toplevel = TopLevel(errors=errors).model_dump_json()
-        if status_code is None:
-            status_code = max((err.status for err in errors))
-        response = make_response(toplevel, status_code)
         response.content_type = 'application/vnd.api+json'
         return response
 
@@ -164,9 +163,14 @@ def jsonapi(func):
         :param kwargs: entry kwargs.
         """
         create_fetching_context_proxy(include, fields__, filters__, sort, page__number__, page__size__, page__max__)
-        res = func(*args, **kwargs)
+        try:
+            res = func(*args, **kwargs)
+        except Exception as e:
+            return current_app.handle_user_exception(e)
+
         if iscoroutine(res):
             res = await res
+
         code = 200
         try:
             if isinstance(res, Query):
@@ -176,8 +180,7 @@ def jsonapi(func):
             elif isinstance(res, TopLevel):
                 _toplevel = res
             else:
-                msg = f"{res} is not a Query or TopLevel instance"
-                raise InternalServerError(msg)
+                raise InternalServerError(f"{res} is not a Query, ScalarResult or TopLevel instance")
         except NotFound:
             if ensure_one:
                 raise
@@ -370,6 +373,15 @@ def get_resource_links(jsonapi_basemodel) -> dict:
     if isinstance(self_link, dict):
         return self_link
     raise InternalServerError("Unexpected jsonapi_self_link value")
+
+
+def _toplevel_error_response(errors, *, status_code=None):
+    toplevel = TopLevel(errors=errors).model_dump_json()
+    if status_code is None:
+        status_code = max((err.status for err in errors))
+    response = make_response(toplevel, status_code)
+    response.content_type = 'application/vnd.api+json'
+    return response
 
 
 def _add_to_included(included, key, res: JsonApiRelationship, *, prefix, include, exclude):
