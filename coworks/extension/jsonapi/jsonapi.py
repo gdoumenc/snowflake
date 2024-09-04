@@ -87,10 +87,10 @@ class JsonApi:
             try:
                 return handle_http_exception(e)
             except JsonApiError as e:
-                self.capture_exception(e)
+                capture_exception(e)
                 return _toplevel_error_response(e.errors)
             except HTTPException as e:
-                self.capture_exception(e)
+                capture_exception(e)
                 errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
                 return _toplevel_error_response(errors, status_code=e.code)
 
@@ -101,21 +101,21 @@ class JsonApi:
             try:
                 return handle_user_exception(e)
             except JsonApiError as e:
-                self.capture_exception(e)
+                capture_exception(e)
                 return _toplevel_error_response(e.errors)
             except ValidationError as e:
-                self.capture_exception(e)
+                capture_exception(e)
                 errors = [Error(id="", status=BadRequest.code, code=err['type'],
                                 links=ErrorLinks(about=err['url']),  # type: ignore[typeddict-item]
                                 title=err['msg'], detail=str(err['loc'])) for err in e.errors()]
                 errors.append(Error(id="", status=BadRequest.code, title=e.title, detail=str(e)))
                 return _toplevel_error_response(errors, status_code=BadRequest.code)
             except HTTPException as e:
-                self.capture_exception(e)
+                capture_exception(e)
                 errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
                 return _toplevel_error_response(errors, status_code=e.code)
             except Exception as e:
-                self.capture_exception(e)
+                capture_exception(e)
                 errors = [Error(id=e.__class__.__name__, title=e.__class__.__name__, detail=str(e),
                                 status=InternalServerError.code)]
                 return _toplevel_error_response(errors, status_code=InternalServerError.code)

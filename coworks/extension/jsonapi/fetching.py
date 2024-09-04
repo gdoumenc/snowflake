@@ -1,12 +1,8 @@
 import contextlib
-import json
 import typing as t
 from collections import defaultdict
 from datetime import datetime
 
-from coworks import request
-from coworks.proxy import nr_url
-from coworks.utils import str_to_bool
 from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import TopLevel
 from pydantic.networks import HttpUrl
@@ -14,11 +10,14 @@ from sqlalchemy import ColumnOperators
 from sqlalchemy import desc
 from sqlalchemy import inspect
 from sqlalchemy import not_
-from sqlalchemy.orm import ColumnProperty
-from sqlalchemy.orm import RelationshipProperty
+from sqlalchemy.ext.associationproxy import AssociationProxyInstance
+from sqlalchemy.ext.associationproxy import association_proxy
 from werkzeug.exceptions import UnprocessableEntity
 from werkzeug.local import LocalProxy
 
+from coworks import request
+from coworks.proxy import nr_url
+from coworks.utils import str_to_bool
 from .data import JsonApiBaseModel
 from .data import JsonApiDataMixin
 from .query import Pagination
@@ -105,55 +104,51 @@ class FetchingContext:
             jsonapi_type: str = sql_model.jsonapi_type.__get__(sql_model)
         else:
             jsonapi_type = t.cast(str, sql_model.jsonapi_type)
-        filter_parameters = self._filters.get(jsonapi_type, {})
-        for key, value in filter_parameters:
+        for key, value in self.get_filter_parameters(jsonapi_type):
 
             # If parameters are defined in body payload they may be not defined as list
             if not isinstance(value, list):
                 value = [value]
 
-            name, key, oper = self.get_decomposed_key(key)
-            if not hasattr(sql_model, key):
-                msg = f"Wrong '{key}' property for sql model '{jsonapi_type}' in filters parameters"
-                raise UnprocessableEntity(msg)
+            rel_name, col_name, oper = self.get_decomposed_key(key)
 
-            column = getattr(sql_model, key)
-
-            if oper == 'null':
-                if len(value) != 1:
-                    msg = f"Multiple boolean values '{key}' for null test not allowed"
+            # Column filtering
+            if not rel_name:
+                if not hasattr(sql_model, col_name):
+                    msg = f"Wrong '{col_name}' property for sql model '{jsonapi_type}' in filters parameters"
                     raise UnprocessableEntity(msg)
-                exp = column.is_(None) if str_to_bool(value[0]) else not_(column.is_(None))
-                _sql_filters.append(exp)
 
-            elif isinstance(column.property, ColumnProperty):
+                # Appends a sql filter criterion on column
+                column = getattr(sql_model, col_name)
                 _type = getattr(column, 'type', None)
-                if _type:
-                    if _type.python_type is bool:
-                        _sql_filters.append(*bool_sql_filter(jsonapi_type, key, column, oper, value))
-                    elif _type.python_type is str:
-                        _sql_filters.append(*str_sql_filter(jsonapi_type, key, column, oper, value))
-                    elif _type.python_type is int:
-                        _sql_filters.append(*int_sql_filter(jsonapi_type, key, column, oper, value))
-                    elif _type.python_type is datetime:
-                        _sql_filters.append(*datetime_sql_filter(jsonapi_type, key, column, oper, value))
-                else:
-                    _sql_filters.append(column.in_(value))
-            elif isinstance(column.property, RelationshipProperty):
-                if not isinstance(value, list) or len(value) != 1:
-                    msg = (f"Wrong '{value}' value for sql model '{jsonapi_type}'"
-                           " in filters parameters (should be a simple list).")
+                _sql_filters.append(*sql_filter(_type, column, oper, value))
+
+            # Relationship filtering
+            else:
+                if '.' in col_name:
+                    raise UnprocessableEntity(f"Association proxy of one level only {col_name}")
+                if not hasattr(sql_model, rel_name):
+                    msg = f"Wrong '{rel_name}' property for sql model '{jsonapi_type}' in filters parameters"
                     raise UnprocessableEntity(msg)
-                value = json.loads(value[0])
-                if not isinstance(value, dict):
-                    msg = (f"Wrong '{value}' value for sql model '{jsonapi_type}'"
-                           " in filters parameters (should be a dict).")
-                    raise UnprocessableEntity(msg)
-                for k, v in value.items():
-                    condition = column.has(**{k: v})
-                    _sql_filters.append(condition)
+
+                # Appends a sql filter criterion on an association proxy column
+                proxy = AssociationProxyInstance.for_proxy(association_proxy(rel_name, col_name), sql_model, None)
+                _type = getattr(proxy.attr[1], 'type', None)
+                _sql_filters.append(*sql_filter(_type, proxy, oper, value))
 
         return _sql_filters
+
+    def get_filter_parameters(self, jsonapi_type: str):
+        """Get all filters parameters starting with the jsonapi model class name."""
+        params = []
+        for k in filter(lambda x: x.startswith(jsonapi_type), self._filters.keys()):
+            criterions = self._filters.get(k, [])
+            for col, value in criterions:
+                prefix = k[len(jsonapi_type):]
+                if prefix:
+                    col = prefix[1:] + '.' + col
+                params.append((col, value))
+        return params
 
     def sql_order_by(self, sql_model):
         """Returns a SQLAlchemy order from model using fetching order keys.
@@ -188,17 +183,6 @@ class FetchingContext:
             _sql_order_by.append(column)
         return _sql_order_by
 
-    def _add_branch(self, tree, vector, value):
-        key = vector[0]
-
-        if len(vector) == 1:
-            tree[key] = value
-        else:
-            sub_tree = tree.get(key, {})
-            tree[key] = self._add_branch(sub_tree, vector[1:], value)
-
-        return tree
-
     @staticmethod
     def add_pagination(toplevel: TopLevel, pagination: Pagination):
         if pagination.total > 1:
@@ -231,8 +215,8 @@ class FetchingContext:
             key, oper = key.split('____', 1)
 
         # if the key is named (for allowing composition of filters)
-        if ':' in key:
-            name, key = key.split(':', 1)
+        if '.' in key:
+            name, key = key.split('.', 1)
 
         return name, key, oper
 
@@ -258,41 +242,75 @@ def base_model_filter(column, oper, value) -> bool:
         return column != value
     if oper == 'contains':
         return value in column
+    if oper == 'ncontains':
+        return value not in column
     msg = f"Undefined operator '{oper}' for string value"
     raise UnprocessableEntity(msg)
 
 
-def bool_sql_filter(jsonapi_type, key, column, oper, value) -> list[ColumnOperators]:
+def sql_filter(_type, column, oper: str | None, value: list) -> list[ColumnOperators]:
+    """Creates SQL filter depending of the column type.
+
+    :param _type: Column type.
+    :param column: Column name.
+    :param oper: SQLAchemy operator.
+    :param value: Value.
+    """
+    if oper == 'null':
+        if len(value) != 1:
+            raise UnprocessableEntity("Multiple boolean values for null test not allowed")
+        return [column.is_(None) if str_to_bool(value[0]) else not_(column.is_(None))]
+
+    if _type:
+        if _type.python_type is bool:
+            return bool_sql_filter(column, oper, value)
+        if _type.python_type is str:
+            return str_sql_filter(column, oper, value)
+        elif _type.python_type is int:
+            return int_sql_filter(column, oper, value)
+        elif _type.python_type is datetime:
+            return datetime_sql_filter(column, oper, value)
+    return column.in_(value)
+
+
+def bool_sql_filter(column, oper, value) -> list[ColumnOperators]:
     """Boolean filter."""
     if len(value) != 1:
-        msg = f"Multiple boolean values '{key}' property on model '{jsonapi_type}' is not allowed"
-        raise UnprocessableEntity(msg)
+        raise UnprocessableEntity("Multiple boolean values is not allowed")
     return [column == str_to_bool(value[0])]
 
 
-def str_sql_filter(jsonapi_type, key, column, oper, value) -> list[ColumnOperators]:
+def str_sql_filter(column, oper, value) -> list[ColumnOperators]:
     """String filter."""
     oper = oper or 'eq'
     if oper == 'eq':
         return [column.in_(value)]
     if oper == 'ilike':
         return [column.ilike('%' + str(v) + '%') for v in value]
+    if oper == 'nilike':
+        return [not_(column.ilike('%' + str(v) + '%')) for v in value]
     if oper == 'contains':
         return [column.contains(str(v)) for v in value]
+    if oper == 'ncontains':
+        return [not_(column.contains(str(v))) for v in value]
     msg = f"Undefined operator '{oper}' for string value"
     raise UnprocessableEntity(msg)
 
 
-def int_sql_filter(jsonapi_type, key, column, oper, value) -> list[ColumnOperators]:
+def int_sql_filter(column, oper, value) -> list[ColumnOperators]:
     """Datetime filter."""
     oper = oper or 'eq'
-    if oper not in ('eq', 'neq', 'ge', 'gt', 'le', 'lt'):
+    if oper not in ('eq', 'neq', 'ge', 'gt', 'le', 'lt', 'in'):
         msg = f"Undefined operator '{oper}' for integer value"
         raise UnprocessableEntity(msg)
-    return [sort_operator(column, oper, int(v)) for v in value]
+    if oper == 'in':
+        print([[int(i) for i in v.split(',')] for v in value])
+        return [column.in_([int(i) for i in v.split(',')]) for v in value]
+    else:
+        return [sort_operator(column, oper, int(v)) for v in value]
 
 
-def datetime_sql_filter(jsonapi_type, key, column, oper, value) -> list[ColumnOperators]:
+def datetime_sql_filter(column, oper, value) -> list[ColumnOperators]:
     """Datetime filter."""
     oper = oper or 'eq'
     if oper not in ('eq', 'neq', 'ge', 'gt', 'le', 'lt'):
@@ -301,7 +319,7 @@ def datetime_sql_filter(jsonapi_type, key, column, oper, value) -> list[ColumnOp
     return [sort_operator(column, oper, datetime.fromisoformat(v)) for v in value]
 
 
-def sort_operator(column: t.Any, oper, value) -> t.Any:
+def sort_operator(column, oper, value) -> t.Any:
     if oper == 'eq':
         return column == value
     if oper == 'neq':
