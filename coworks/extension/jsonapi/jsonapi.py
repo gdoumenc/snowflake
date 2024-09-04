@@ -4,6 +4,8 @@ from functools import update_wrapper
 from inspect import Parameter
 from inspect import signature
 
+from coworks import TechMicroService
+from coworks import request
 from flask import current_app
 from flask import make_response
 from jsonapi_pydantic.v1_0 import Error
@@ -23,8 +25,6 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.exceptions import InternalServerError
 from werkzeug.exceptions import NotFound
 
-from coworks import TechMicroService
-from coworks import request
 from .data import JsonApiDataMixin
 from .data import JsonApiRelationship
 from .fetching import create_fetching_context_proxy
@@ -401,8 +401,13 @@ def _add_to_included(included, key, res: JsonApiRelationship, *, prefix, include
 
             # Creates and includes the resource
             new_prefix = f"{prefix}{key}." if prefix else f"{key}."
+            field_names = fetching_context.field_names(res.jsonapi_type)
+            if field_names:
+                filtered_fields = {new_prefix + n for n in field_names} | include
+            else:
+                filtered_fields = include
             res_included = to_ressource_data(res.resource_value, included=included, prefix=new_prefix,
-                                             include=include, exclude=exclude)
+                                             include=filtered_fields, exclude=exclude)
             included[res_key] = res_included
 
 
