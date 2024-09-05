@@ -30,7 +30,7 @@ class FetchingContext:
                  page__number__: int | None = None, page__size__: int | None = None, page__max__: int | None = None):
         self.include: set[str] = set(split_parameter(include)) if include else set()
         self._fields: dict[str, str] = fields__ if fields__ is not None else {}
-        self._sort: set[str] = list(split_parameter(sort)) if sort else []
+        self._sort: list[str] = list(split_parameter(sort)) if sort else []
         self.page: int = page__number__ or 1
         self.per_page: int = page__size__ or 100
         self.max_per_page: int = page__max__ or 100

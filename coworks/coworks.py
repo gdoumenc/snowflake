@@ -188,7 +188,7 @@ class Blueprint(FlaskBlueprint):
 
         # Defer blueprint route initialization.
         if not options.get('hide_routes', False):
-            func = partial(TechMicroService.add_coworks_routes, state.app, state)
+            func = partial(TechMicroService.add_coworks_routes, t.cast(TechMicroService, state.app), state)
             ms.deferred_init_routes_functions = itertools.chain(ms.deferred_init_routes_functions, (func,))
 
         return state

@@ -64,7 +64,7 @@ class CoworksMapAdapter(MapAdapter):
         self.aws_entry_path = environ["aws_entry_path"]
         self.aws_entry_path_parameters = environ["aws_entry_path_parameters"]
 
-    def match(self, method=None, return_rule=False, **kwargs):
+    def match(self, method=None, return_rule=False, **kwargs):  # type: ignore[override]
         try:
             if self.aws_entry_path not in self.aws_url_map:
                 raise NotFound()
@@ -169,7 +169,7 @@ class CoworksRequest(FlaskRequest):
             self._load_stream_form_files()
         return self.__files
 
-    def get_data(self, **kwargs):
+    def get_data(self, **kwargs):  # type: ignore[override]
         if not self.in_lambda_context:
             return super().get_data(**kwargs)
 
@@ -180,7 +180,7 @@ class CoworksRequest(FlaskRequest):
                 self.__data = self.aws_body if self._body_is_dict else json.loads(self.aws_body)
         return self.__data
 
-    def get_json(self, **kwargs):
+    def get_json(self, **kwargs):  # type: ignore[override]
         if not self.in_lambda_context:
             return super().get_json(**kwargs)
 
