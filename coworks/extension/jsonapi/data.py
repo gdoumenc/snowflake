@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import typing as t
+from math import ceil
 from typing import overload
 
-from math import ceil
 from pydantic import BaseModel
 from pydantic import field_validator
 
@@ -87,7 +87,11 @@ class JsonApiDataMixin:
 
     def jsonapi_attributes(self, include: set[str], exclude: set[str]) \
             -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
-        """Splits the structure in attributes versus relationships."""
+        """Splits the structure in attributes versus relationships.
+
+        :param include: included attributes or relationships
+        :param exclude: excluded attributes or relationships
+        """
         return {}, {}
 
 

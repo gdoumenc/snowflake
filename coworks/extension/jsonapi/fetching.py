@@ -28,9 +28,9 @@ class FetchingContext:
     def __init__(self, include: str | None = None, fields__: dict[str, str] | None = None,
                  filters__: dict[str, str] | None = None, sort: str | None = None,
                  page__number__: int | None = None, page__size__: int | None = None, page__max__: int | None = None):
-        self.include: set[str] = set(map(str.strip, include.split(','))) if include else set()
+        self.include: set[str] = set(split_parameter(include)) if include else set()
         self._fields: dict[str, str] = fields__ if fields__ is not None else {}
-        self._sort: list[str] = list(map(str.strip, sort.split(','))) if sort else []
+        self._sort: set[str] = list(split_parameter(sort)) if sort else []
         self.page: int = page__number__ or 1
         self.per_page: int = page__size__ or 100
         self.max_per_page: int = page__max__ or 100
@@ -61,7 +61,8 @@ class FetchingContext:
             field = fields[0]
         else:
             field = fields
-        return set(map(str.strip, field.split(',')))
+
+        return set(split_parameter(field))
 
     def pydantic_filters(self, base_model: JsonApiBaseModel):
         _base_model_filters: list[bool] = []
@@ -334,3 +335,7 @@ def sort_operator(column, oper, value) -> t.Any:
         return column < value
     msg = f"Undefined operator '{oper}' in sort_operator"
     raise UnprocessableEntity(msg)
+
+
+def split_parameter(param: str) -> t.Iterable[str]:
+    return filter(lambda x: x, map(str.strip, param.split(',')))
