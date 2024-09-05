@@ -88,7 +88,7 @@ mypy = { cmd = "mypy coworks", help = "Type checking using mypy" }
 pytest = { cmd = "pytest", help = "Unit testing using pytest" }
 github_pytest = { cmd = "pytest -m 'not not_on_github'", help = "Unit testing using pytest" }
 test = { composite = ["ruff", "mypy", "pytest"] }
-on_github = { composite = ["ruff", "typecheck", "github_pytest"] }
+on_github = { composite = ["ruff", "mypy", "github_pytest"] }
 plugins = { shell = "mkdir -p dist; zip -r dist/plugins.zip coworks/operators.py coworks/sensors.py coworks/biz/*" }
 pre_build = { cmd = "pdm test" }
 pre_fury = { cmd = "pdm build" }
