@@ -4,8 +4,6 @@ from functools import update_wrapper
 from inspect import Parameter
 from inspect import signature
 
-from coworks import TechMicroService
-from coworks import request
 from flask import current_app
 from flask import make_response
 from jsonapi_pydantic.v1_0 import Error
@@ -25,6 +23,8 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.exceptions import InternalServerError
 from werkzeug.exceptions import NotFound
 
+from coworks import TechMicroService
+from coworks import request
 from .data import JsonApiDataMixin
 from .data import JsonApiRelationship
 from .fetching import create_fetching_context_proxy
@@ -290,8 +290,8 @@ def get_toplevel_from_query(query: Query | Scalar, *, ensure_one: bool, include:
         else:
             if not isinstance(query, Query):
                 raise InternalServerError("The query must be a Query if ensure_one is set to True.")
-            pagination: Pagination = query.paginate(page=fetching_context.page, per_page=fetching_context.per_page,
-                                                    max_per_page=fetching_context.max_per_page)
+            pagination = query.paginate(page=fetching_context.page, per_page=fetching_context.per_page,
+                                        max_per_page=fetching_context.max_per_page)
             toplevel = toplevel_from_pagination(pagination, include=include, exclude=exclude)
         return toplevel
 
@@ -330,7 +330,7 @@ def toplevel_from_data(res: JsonApiDataMixin, include: set[str], exclude: set[st
     return TopLevel(data=resources, included=included_resources if included else None)
 
 
-def toplevel_from_pagination(pagination: Pagination, include: set[str], exclude: set[str]):
+def toplevel_from_pagination(pagination: type[Pagination], include: set[str], exclude: set[str]):
     """Transform an iterable pagination into a toplevel jsonapi.
 
     :param pagination: the data to transform.

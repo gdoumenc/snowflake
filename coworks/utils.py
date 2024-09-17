@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 import dotenv
+
 from .const import DEFAULT_DEV_STAGE
 
 
@@ -17,8 +18,12 @@ def is_json(mt):
     )
 
 
-def str_to_bool(val: str) -> bool:
-    return val.lower() in ['true', '1', 'yes']
+def to_bool(val: str | bool) -> bool:
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        return val.lower() in ['true', '1', 'yes']
+    return False
 
 
 def get_app_stage():

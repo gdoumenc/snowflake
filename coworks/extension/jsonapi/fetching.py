@@ -17,7 +17,7 @@ from werkzeug.local import LocalProxy
 
 from coworks import request
 from coworks.proxy import nr_url
-from coworks.utils import str_to_bool
+from coworks.utils import to_bool
 from .data import JsonApiBaseModel
 from .data import JsonApiDataMixin
 from .query import Pagination
@@ -75,7 +75,7 @@ class FetchingContext:
             column = getattr(base_model, key)
 
             if oper == 'null':
-                if str_to_bool(value[0]):
+                if to_bool(value[0]):
                     _base_model_filters.append(column is None)
                 else:
                     _base_model_filters.append(column is not None)
@@ -83,7 +83,7 @@ class FetchingContext:
 
             _type = base_model.model_fields.get(key).annotation  # type: ignore[union-attr]
             if _type is bool:
-                _base_model_filters.append(base_model_filter(column, oper, str_to_bool(value[0])))
+                _base_model_filters.append(base_model_filter(column, oper, to_bool(value[0])))
             elif _type is int:
                 _base_model_filters.append(base_model_filter(column, oper, int(value[0])))
             elif _type is datetime:
@@ -95,7 +95,7 @@ class FetchingContext:
 
         return all(_base_model_filters)
 
-    def sql_filters(self, sql_model: t.Type[JsonApiDataMixin]):
+    def sql_filters(self, sql_model: type[JsonApiDataMixin]):
         """Returns the list of filters as a SQLAlchemy filter.
 
         :param sql_model: the SQLAlchemy model (used to get the SQLAlchemy filter)
@@ -185,7 +185,7 @@ class FetchingContext:
         return _sql_order_by
 
     @staticmethod
-    def add_pagination(toplevel: TopLevel, pagination: Pagination):
+    def add_pagination(toplevel: TopLevel, pagination: type[Pagination]):
         if pagination.total > 1:
             links = toplevel.links or {}
             if pagination.has_prev:
@@ -260,7 +260,7 @@ def sql_filter(_type, column, oper: str | None, value: list) -> list[ColumnOpera
     if oper == 'null':
         if len(value) != 1:
             raise UnprocessableEntity("Multiple boolean values for null test not allowed")
-        return [column.is_(None) if str_to_bool(value[0]) else not_(column.is_(None))]
+        return [column.is_(None) if to_bool(value[0]) else not_(column.is_(None))]
 
     if _type:
         if _type.python_type is bool:
@@ -278,7 +278,7 @@ def bool_sql_filter(column, oper, value) -> list[ColumnOperators]:
     """Boolean filter."""
     if len(value) != 1:
         raise UnprocessableEntity("Multiple boolean values is not allowed")
-    return [column == str_to_bool(value[0])]
+    return [column == to_bool(value[0])]
 
 
 def str_sql_filter(column, oper, value) -> list[ColumnOperators]:

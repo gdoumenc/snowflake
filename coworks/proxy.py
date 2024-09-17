@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from pydantic import ValidationError
 from werkzeug.exceptions import UnprocessableEntity
 
-from .utils import str_to_bool
+from .utils import to_bool
 from .globals import request
 
 if t.TYPE_CHECKING:
@@ -240,7 +240,7 @@ def as_typed_kwargs(func: t.Callable, kwargs: dict):
                 msg = f"Multiple values for '{name}' query parameters are not allowed"
                 raise UnprocessableEntity(msg)
             if issubclass(parameter_type, bool):
-                return str_to_bool(val)
+                return to_bool(val)
             if issubclass(parameter_type, dict):
                 if isinstance(val, str):
                     return json.loads(val)

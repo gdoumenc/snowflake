@@ -28,7 +28,7 @@ class Scalar(t.Protocol):
 
 @t.runtime_checkable
 class Query(t.Protocol):
-    def paginate(self, *, page, per_page, max_per_page) -> Pagination:
+    def paginate(self, *, page, per_page, max_per_page) -> type[Pagination]:
         ...
 
     def all(self) -> list[JsonApiDataMixin]:
@@ -50,6 +50,11 @@ class ListPagination(CursorPagination):
         assert self.page is not None  # by the validator
         assert self.per_page is not None  # by the validator
         return self.values[(self.page - 1) * self.per_page: self.page * self.per_page].__iter__()
+
+    @classmethod
+    def paginate(cls, values) -> Pagination:
+        pagination = cls(values=values, page=1, per_page=len(values))
+        return t.cast(Pagination, pagination)
 
 
 class ListQuery(BaseModel):
