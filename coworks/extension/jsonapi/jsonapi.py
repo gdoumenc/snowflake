@@ -6,6 +6,7 @@ from inspect import signature
 
 from flask import current_app
 from flask import make_response
+from flask.typing import ResponseReturnValue
 from jsonapi_pydantic.v1_0 import Error
 from jsonapi_pydantic.v1_0 import ErrorLinks
 from jsonapi_pydantic.v1_0 import Link
@@ -147,7 +148,7 @@ def jsonapi(func):
                        fields__: dict | None = None, filters__: dict | None = None, sort: str | None = None,
                        page__number__: int | None = None, page__size__: int | None = None,
                        page__max__: int | None = None,
-                       __neorezo__: dict | None = None, **kwargs):
+                       __neorezo__: dict | None = None, **kwargs) -> ResponseReturnValue:
         """
 
         :param args: entry args.,
@@ -165,27 +166,35 @@ def jsonapi(func):
         create_fetching_context_proxy(include, fields__, filters__, sort, page__number__, page__size__, page__max__)
         try:
             res = func(*args, **kwargs)
+            if iscoroutine(res):
+                res = await res
+            try:
+                if isinstance(res, Query):
+                    _toplevel = get_toplevel_from_query(res, ensure_one=ensure_one)
+                elif isinstance(res, ScalarResult):
+                    _toplevel = get_toplevel_from_query(res, ensure_one=True)
+                elif isinstance(res, TopLevel):
+                    _toplevel = res
+                else:
+                    raise InternalServerError(f"{res} is not a Query, ScalarResult or TopLevel instance")
+            except NotFound:
+                if ensure_one:
+                    raise
+                _toplevel = TopLevel(data=[])
+            if not _toplevel.errors and not _toplevel.data:
+                return _toplevel.model_dump_json(exclude_none=True), 204
+            return _toplevel.model_dump_json(exclude_none=True), 200
         except Exception as e:
-            return current_app.handle_user_exception(e)
-
-        if iscoroutine(res):
-            res = await res
-
-        code = 200
-        try:
-            if isinstance(res, Query):
-                _toplevel = get_toplevel_from_query(res, ensure_one=ensure_one)
-            elif isinstance(res, ScalarResult):
-                _toplevel = get_toplevel_from_query(res, ensure_one=True)
-            elif isinstance(res, TopLevel):
-                _toplevel = res
-            else:
-                raise InternalServerError(f"{res} is not a Query, ScalarResult or TopLevel instance")
-        except NotFound:
-            if ensure_one:
-                raise
-            _toplevel = TopLevel(data=[])
-        return _toplevel.model_dump_json(exclude_none=True), code
+            resp_or_err = current_app.handle_user_exception(e)
+            if isinstance(resp_or_err, HTTPException):
+                code = resp_or_err.code
+                errors = [Error(id=str(code), title="HTTP Error", detail=resp_or_err.description, status=code)]
+                return _toplevel_error_response(errors)
+            if isinstance(resp_or_err, Exception):
+                code = InternalServerError.code
+                errors = [Error(id=str(code), title="NeoRezo Error", detail=str(e), status=code)]
+                return _toplevel_error_response(errors)
+            return resp_or_err
 
     # Adds JSON:API query parameters
     sig = signature(_jsonapi)
