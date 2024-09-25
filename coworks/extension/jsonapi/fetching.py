@@ -3,6 +3,9 @@ import typing as t
 from collections import defaultdict
 from datetime import datetime
 
+from coworks import request
+from coworks.proxy import nr_url
+from coworks.utils import to_bool
 from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import TopLevel
 from pydantic.networks import HttpUrl
@@ -15,9 +18,6 @@ from sqlalchemy.ext.associationproxy import association_proxy
 from werkzeug.exceptions import UnprocessableEntity
 from werkzeug.local import LocalProxy
 
-from coworks import request
-from coworks.proxy import nr_url
-from coworks.utils import to_bool
 from .data import JsonApiBaseModel
 from .data import JsonApiDataMixin
 from .query import Pagination
@@ -286,6 +286,8 @@ def str_sql_filter(column, oper, value) -> list[ColumnOperators]:
     oper = oper or 'eq'
     if oper == 'eq':
         return [column.in_(value)]
+    if oper == 'neq':
+        return [not_(column.in_(value))]
     if oper == 'ilike':
         return [column.ilike('%' + str(v) + '%') for v in value]
     if oper == 'nilike':
@@ -299,13 +301,9 @@ def str_sql_filter(column, oper, value) -> list[ColumnOperators]:
 
 
 def int_sql_filter(column, oper, value) -> list[ColumnOperators]:
-    """Datetime filter."""
+    """Integer filter."""
     oper = oper or 'eq'
-    if oper not in ('eq', 'neq', 'ge', 'gt', 'le', 'lt', 'in'):
-        msg = f"Undefined operator '{oper}' for integer value"
-        raise UnprocessableEntity(msg)
     if oper == 'in':
-        print([[int(i) for i in v.split(',')] for v in value])
         return [column.in_([int(i) for i in v.split(',')]) for v in value]
     else:
         return [sort_operator(column, oper, int(v)) for v in value]
@@ -314,9 +312,6 @@ def int_sql_filter(column, oper, value) -> list[ColumnOperators]:
 def datetime_sql_filter(column, oper, value) -> list[ColumnOperators]:
     """Datetime filter."""
     oper = oper or 'eq'
-    if oper not in ('eq', 'neq', 'ge', 'gt', 'le', 'lt'):
-        msg = f"Undefined operator '{oper}' for datetime value"
-        raise UnprocessableEntity(msg)
     return [sort_operator(column, oper, datetime.fromisoformat(v)) for v in value]
 
 
@@ -333,7 +328,7 @@ def sort_operator(column, oper, value) -> t.Any:
         return column <= value
     if oper == 'lt':
         return column < value
-    msg = f"Undefined operator '{oper}' in sort_operator"
+    msg = f"Undefined operator '{oper}'"
     raise UnprocessableEntity(msg)
 
 

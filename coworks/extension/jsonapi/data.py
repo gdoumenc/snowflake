@@ -4,8 +4,15 @@ import typing as t
 from math import ceil
 from typing import overload
 
+from jsonapi_pydantic.v1_0 import Link
+from jsonapi_pydantic.v1_0 import Relationship
+from jsonapi_pydantic.v1_0 import ResourceIdentifier
 from pydantic import BaseModel
+from pydantic import HttpUrl
 from pydantic import field_validator
+from werkzeug.exceptions import InternalServerError
+
+from coworks.extension import jsonapi
 
 
 class CursorPagination(BaseModel):
@@ -75,11 +82,11 @@ class JsonApiDataMixin:
 
     @property
     def jsonapi_type(self) -> str:
-        return 'unknown'
+        return ''
 
     @property
     def jsonapi_id(self) -> str:
-        return 'unknown'
+        return ''
 
     @property
     def jsonapi_self_link(self):
@@ -93,6 +100,76 @@ class JsonApiDataMixin:
         :param exclude: excluded attributes or relationships
         """
         return {}, {}
+
+    def to_ressource_data(self, *, included: dict[str, dict], prefix: str | None = None,
+                          include: set[str] | None = None, exclude: set[str] | None = None) -> dict[str, t.Any]:
+        """Transform a simple structure data into a jsonapi ressource data.
+        SHULD BE SET ON JsonApiDataMixin
+
+        Beware : included is a dict of type/id key (jsonapi_type + jsonapi_id) and jsonapi ressource value
+        :param included_prefix: the prefix of the included resources (indirect inclusion)
+        """
+        prefix = prefix or ''
+        include = include or set()
+        exclude = exclude or set()
+
+        # set resource data from basemodel
+        attrs, rels = self.jsonapi_attributes(
+            include=_remove_prefix(include, prefix), exclude=_remove_prefix(exclude, prefix)
+        )
+        include = include or set(rels) - exclude
+
+        # The type may be defined by the class
+        _type = self.jsonapi_type
+        if _type:
+            if 'type' in attrs:
+                attrs['_type'] = attrs.pop('type')
+        else:
+            _type = attrs.pop('type')
+
+        if 'id' in attrs:
+            _id = str(attrs.pop('id'))
+        else:
+            _id = self.jsonapi_id
+
+        # get related resources relationships
+        relationships: dict[str, Relationship] = {}
+        if prefix:
+            to_be_excluded = [k[len(prefix):] for k in exclude if prefix in k]
+        else:
+            to_be_excluded = [k for k in exclude or [] if '.' not in k]
+
+        # add relationship and included resources if needed
+        for key, rel in rels.items():
+            if key in to_be_excluded or rel is None:
+                continue
+
+            if isinstance(rel, list):
+                res_ids = []
+                for val in rel:
+                    res_id = _get_resource_identifier(val)
+                    res_ids.append(res_id)
+                    _add_to_included(included, key, val, include=include, exclude=exclude, prefix=prefix)
+                relationships[key] = Relationship(data=res_ids)
+            else:
+                res_id = _get_resource_identifier(rel)
+                _add_to_included(included, key, rel, include=include, exclude=exclude, prefix=prefix)
+                relationships[key] = Relationship(data=res_id)
+
+        resource_data = {
+            "type": _type,
+            "id": _id,
+            "lid": None,
+            "attributes": attrs,
+            "links": _get_resource_links(self)
+        }
+
+        if relationships:
+            resource_data["relationships"] = relationships
+        if included:
+            resource_data["included"] = included
+
+        return resource_data
 
 
 class JsonApiBaseModel(BaseModel, JsonApiDataMixin):
@@ -150,3 +227,61 @@ class JsonApiDict(dict, JsonApiDataMixin):
             -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
         attrs = {k: v for k, v in self.items() if (not include or k in include)}
         return attrs, {}
+
+
+def _get_resource_identifier(rel: JsonApiRelationship):
+    """ Adds a relationship in the list of relationships from the related model.
+    The relationship may not be complete for circular reference and will be completed after in construction.
+    """
+    if not isinstance(rel, JsonApiRelationship):
+        msg = f"Relationship value must be of type JsonApiRelationship, not {rel.__class__}"
+        raise InternalServerError(msg)
+
+    type_ = rel.jsonapi_type
+    id_ = rel.jsonapi_id
+    return ResourceIdentifier(type=type_, id=id_)
+
+
+def _get_resource_links(jsonapi_basemodel) -> dict:
+    """Get the links associated to a ressource (from jsonapi_self_link property).
+
+    If jsonapi_self_link is a string then there is only one self link.
+    """
+    self_link = jsonapi_basemodel.jsonapi_self_link
+    if isinstance(self_link, str):
+        return {'self': Link(href=HttpUrl(jsonapi_basemodel.jsonapi_self_link))}
+    if isinstance(self_link, dict):
+        return self_link
+    raise InternalServerError("Unexpected jsonapi_self_link value")
+
+
+def _add_to_included(included, key, res: JsonApiRelationship, *, prefix, include, exclude):
+    """Adds the resource defined at key to the included list of resource.
+
+    :param included: list of included resources to increment (if not already inside).
+    :param key: the key where the resource is in the parent resource.
+    :param res: the relationship to include.
+    :param include: set of included resources
+    :param exclude: set of excluded resources
+    :param included_prefix: dot separated path in resource.
+    """
+    res_key = res.jsonapi_type + res.jsonapi_id
+    if res_key not in included:
+        if res.resource_value:
+            included[res_key] = None
+
+            # Creates and includes the resource
+            new_prefix = f"{prefix}{key}." if prefix else f"{key}."
+            field_names = jsonapi.fetching_context.field_names(res.jsonapi_type)
+            if field_names:
+                filtered_fields = {new_prefix + n for n in field_names} | include
+            else:
+                filtered_fields = include
+            res_included = res.resource_value.to_ressource_data(included=included, prefix=new_prefix,
+                                                                include=filtered_fields, exclude=exclude)
+            included[res_key] = res_included
+
+
+def _remove_prefix(set_names: set[str], prefix: str) -> set[str]:
+    new_set_names = [i[len(prefix):] for i in set_names if i.startswith(prefix)]
+    return {n for n in new_set_names if '.' not in n}
