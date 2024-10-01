@@ -271,6 +271,8 @@ def sql_filter(_type, column, oper: str | None, value: list) -> list[ColumnOpera
             return int_sql_filter(column, oper, value)
         elif _type.python_type is datetime:
             return datetime_sql_filter(column, oper, value)
+        elif _type.python_type is list:
+            return list_sql_filter(column, oper, value)
     return column.in_(value)
 
 
@@ -313,6 +315,16 @@ def datetime_sql_filter(column, oper, value) -> list[ColumnOperators]:
     """Datetime filter."""
     oper = oper or 'eq'
     return [sort_operator(column, oper, datetime.fromisoformat(v)) for v in value]
+
+
+def list_sql_filter(column, oper, value) -> list[ColumnOperators]:
+    """List filter."""
+    if oper == 'contains':
+        return [column.contains(value)]
+    if oper == 'ncontains':
+        return [not_(column.contains([v])) for v in value]
+    msg = f"Undefined operator '{oper}' for list value"
+    raise UnprocessableEntity(msg)
 
 
 def sort_operator(column, oper, value) -> t.Any:
