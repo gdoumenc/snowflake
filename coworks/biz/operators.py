@@ -13,14 +13,13 @@ from airflow.providers.http.hooks.http import HttpHook
 XCOM_DEFAULT_KEY = 'return_value'
 XCOM_CWS_BUCKET = 'bucket'  # the AWS S3 bucket where the coworks techmicroservice result is stored
 XCOM_CWS_KEY = 'key'  # the AWS S3 key where the coworks techmicroservice result is stored
-XCOM_CWS_NAME = 'cws_name'
 XCOM_STATUS_CODE = 'status_code'
 
 
 class TechMicroServiceOperator(BaseOperator):
     template_fields = ["cws_name", "headers", "entry", "query_params", "json", "data"]
 
-    def __init__(self, *, cws_name: str = None, entry: str = '/', method: str = 'get', no_auth: bool = False,
+    def __init__(self, *, cws_name: str = None, entry: str = '/', method: str = 'GET', no_auth: bool = False,
                  query_params: dict | str | None = None, json: dict | str | None = None,
                  data: dict | str | None = None,
                  stage: str = None, api_id: str = None, token: str = None,
@@ -36,13 +35,13 @@ class TechMicroServiceOperator(BaseOperator):
         :param cws_name: the tech microservice name.
         :param entry: the route entry.
         :param method: the route method ('GET', 'POST').
-        :param no_auth: set to 'True' if no authorization is needded (default 'False').
+        :param no_auth: set to 'True' if no authorization is needed (default 'False').
         :param query_params: query parameters for GET method.
         :param json: dict data for POST method.
         :param data: object to send in the body for POST method
         :param stage: the microservice stage (default 'dev' if 'cws_name' not defined).
         :param api_id: APIGateway id (must be defined if no 'cws_name').
-        :param token: Authorization token (must be defined if auth and no 'cws_name').
+        :param token: Authorization token (must be defined if not no_auth and no 'cws_name').
         :param directory_conn_id: connection defined for the directory service (default 'coworks_directory').
         :param asynchronous: asynchronous call (default False).
         :param xcom_push: pushes result in XCom (default True).
@@ -77,28 +76,26 @@ class TechMicroServiceOperator(BaseOperator):
         self.raise_400_errors = raise_400_errors
         self.multiple_outputs_transformer = multiple_outputs_transformer
         self.accept = accept
-        self.headers = headers
-        self._url = self._bucket = self._key = self.__headers = None
+        self.headers = headers or {}
+        self._url = self._bucket = self._key = None
+        self._headers = {}
 
     def pre_execute(self, context):
         """Gets url and token from name or parameters.
 
         Done only before execution not on DAG loading.
         """
+
+        # Creates xray trace id
         dag_run = context['dag_run']
         start_date = dag_run.start_date.timestamp()
         trace_id = f"Root=1-{hex(int(start_date))[2:]}-{f'cws{dag_run.id:0>9}'.encode().hex()}"
         self._headers['x-amzn-trace-id'] = trace_id
         self.log.info(f"Cws trace: {trace_id}")
 
+        # Get url from cws directory
         if self.cws_name:
-            http = HttpHook('get', http_conn_id=self.directory_conn_id)
-            self.log.info("Calling CoWorks directory")
-            data = {'stage': self.stage} if self.stage else {}
-            response = http.run(self.cws_name, data=data)
-            coworks_data = loads(response.text)
-            self.token = coworks_data['token']
-            self._url = f"{coworks_data['url']}/{self.entry}"
+            self.token, self._url = self._get_token_url_from_directory()
         else:
             self._url = self.url
 
@@ -124,18 +121,10 @@ class TechMicroServiceOperator(BaseOperator):
             if (self.raise_400_errors and resp.status_code >= 400) or resp.status_code >= 500:
                 if self.xcom_push_flag:
                     self._push_response(context, resp)
-
-                msg = f"The TechMicroService {self.cws_name} had an error {resp.status_code}!"
-                self.log.error(msg)
                 raise AirflowFailException(msg)
 
         if self.xcom_push_flag:
             self._push_response(context, resp)
-
-    @property
-    def url(self):
-        """Default url construction."""
-        return f'https://{self.api_id}.execute-api.eu-west-1.amazonaws.com/{self.stage}/{self.entry}'
 
     @property
     def default_headers(self):
@@ -146,26 +135,29 @@ class TechMicroServiceOperator(BaseOperator):
         }
 
     @property
-    def _headers(self):
-        if self.__headers is None:
-            self.__headers = self.default_headers
-            if self.headers:
-                self.__headers.update(self.headers)
-        return self.__headers
+    def url(self):
+        """Default url construction."""
+        return f'https://{self.api_id}.execute-api.eu-west-1.amazonaws.com/{self.stage}/{self.entry}'
+
+    def _get_token_url_from_directory(self):
+        http = HttpHook('get', http_conn_id=self.directory_conn_id)
+        self.log.info("Calling CoWorks directory")
+        data = {'stage': self.stage} if self.stage else {}
+        response = http.run(self.cws_name, data=data)
+        coworks_data = loads(response.text)
+        return coworks_data['token'], f"{coworks_data['url']}/{self.entry}"
 
     def _call_cws(self, context):
         """Method used by operator and sensor."""
         self.log.info(f"Calling {self.method.upper()} method to {self._url}")
-        resp = requests.request(
-            self.method.upper(), self._url, headers=self._headers,
-            params=self.query_params, json=self.json, data=self.data
-        )
+        headers = {**self._headers, **self.default_headers, **self.headers}
+        resp = requests.request(self.method.upper(), self._url, headers=headers,
+                                params=self.query_params, json=self.json, data=self.data)
         self.log.info(f"Resulting status code : {resp.status_code}")
         return resp
 
     def _push_response(self, context, resp):
         # Return values or store file information
-        self.xcom_push(context, XCOM_CWS_NAME, self.cws_name or self.api_id)
         if self.asynchronous:
             self.xcom_push(context, XCOM_CWS_BUCKET, self._bucket)
             self.xcom_push(context, XCOM_CWS_KEY, self._key)
@@ -219,9 +211,15 @@ class AsyncTechServicePullOperator(BaseOperator):
 
         # Reads bucket file content
         bucket_name = ti.xcom_pull(task_ids=self.cws_task_id, key=XCOM_CWS_BUCKET)
-        key = ti.xcom_pull(task_ids=self.cws_task_id, key=XCOM_CWS_KEY)
+        bucket_key = ti.xcom_pull(task_ids=self.cws_task_id, key=XCOM_CWS_KEY)
+
+        # For dynamic tasks, the xcom are stored in a list
+        if ti.map_index >= 0:
+            bucket_name = bucket_name[ti.map_index]
+            bucket_key = bucket_key[ti.map_index]
+
         s3 = S3Hook(aws_conn_id=self.aws_conn_id)
-        file = s3.download_file(key, bucket_name=bucket_name)
+        file = s3.download_file(bucket_key, bucket_name=bucket_name)
         with open(file, "r") as myfile:
             data = myfile.read()
         payload = loads(data)
