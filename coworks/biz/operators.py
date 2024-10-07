@@ -19,15 +19,16 @@ XCOM_STATUS_CODE = 'status_code'
 class TechMicroServiceOperator(BaseOperator):
     template_fields = ["cws_name", "headers", "entry", "query_params", "json", "data"]
 
-    def __init__(self, *, cws_name: str = None, entry: str = '/', method: str = 'GET', no_auth: bool = False,
+    def __init__(self, *, cws_name: str | None = None, no_auth: bool | None = False,
+                 entry: str | None = '/', method: str | None = 'GET',
                  query_params: dict | str | None = None, json: dict | str | None = None,
                  data: dict | str | None = None,
-                 stage: str = None, api_id: str = None, token: str = None,
-                 raise_errors: bool = True, raise_400_errors: bool = True,
-                 accept: str = 'application/json', headers: dict = None, log_response: bool = False,
-                 directory_conn_id: str = 'coworks_directory', asynchronous: bool = False,
-                 xcom_push: bool = True, json_result: bool = True,
-                 multiple_outputs_transformer: t.Callable[[dict], dict] = None,
+                 stage: str | None = None, api_id: str | None = None, token: str | None = None,
+                 raise_errors: bool | None = True, raise_400_errors: bool | None = True,
+                 accept: str | None = 'application/json', headers: dict = None, log_response: bool | None = False,
+                 directory_conn_id: str | None = 'coworks_directory', asynchronous: bool | None = False,
+                 xcom_push: bool | None = True, json_result: bool | None = True,
+                 multiple_outputs_transformer: t.Callable[[dict], dict] | None = None,
                  **kwargs) -> None:
         """Microservice operator.
         The tech microservice may be called from its name or from it api_id, stage and token.
@@ -121,6 +122,9 @@ class TechMicroServiceOperator(BaseOperator):
             if (self.raise_400_errors and resp.status_code >= 400) or resp.status_code >= 500:
                 if self.xcom_push_flag:
                     self._push_response(context, resp)
+
+                msg = f"The microservice had an error {resp.status_code}!"
+                self.log.error(msg)
                 raise AirflowFailException(msg)
 
         if self.xcom_push_flag:
@@ -151,6 +155,7 @@ class TechMicroServiceOperator(BaseOperator):
         """Method used by operator and sensor."""
         self.log.info(f"Calling {self.method.upper()} method to {self._url}")
         headers = {**self._headers, **self.default_headers, **self.headers}
+        self.log.info(f"Headers is {headers}")
         resp = requests.request(self.method.upper(), self._url, headers=headers,
                                 params=self.query_params, json=self.json, data=self.data)
         self.log.info(f"Resulting status code : {resp.status_code}")
