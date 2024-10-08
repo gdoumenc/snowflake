@@ -298,6 +298,10 @@ def str_sql_filter(column, oper, value) -> list[ColumnOperators]:
         return [column.contains(str(v)) for v in value]
     if oper == 'ncontains':
         return [not_(column.contains(str(v))) for v in value]
+    if oper == 'in':
+        return [column.in_([w for v in value for w in str(v).split(',')])]
+    if oper == 'nin':
+        return [not_(column.in_([w for v in value for w in str(v).split(',')]))]
     msg = f"Undefined operator '{oper}' for string value"
     raise UnprocessableEntity(msg)
 
