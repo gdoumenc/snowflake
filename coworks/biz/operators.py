@@ -134,8 +134,9 @@ class TechMicroServiceOperator(BaseOperator):
     def default_headers(self):
         """Default headers values."""
         return {
-            'Content-Type': "application/json",
+            'Authorization': self.token,
             'Accept': self.accept,
+            'Content-Type': "application/json",
         }
 
     @property
@@ -145,7 +146,7 @@ class TechMicroServiceOperator(BaseOperator):
 
     def _get_token_url_from_directory(self):
         http = HttpHook('get', http_conn_id=self.directory_conn_id)
-        self.log.info("Calling CoWorks directory")
+        self.log.info(f"Calling CoWorks directory for {self.cws_name}")
         data = {'stage': self.stage} if self.stage else {}
         response = http.run(self.cws_name, data=data)
         coworks_data = loads(response.text)
