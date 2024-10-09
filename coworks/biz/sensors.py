@@ -43,7 +43,12 @@ class AsyncTechMicroServiceSensor(BaseSensorOperator):
         # Get bucket information to poke
         ti = context['ti']
         bucket_name = ti.xcom_pull(task_ids=self.cws_task_id, key='bucket')
+        self.log.info(f"bucket_name: {bucket_name}")
         bucket_key = ti.xcom_pull(task_ids=self.cws_task_id, key='key')
+        self.log.info(f"bucket_key: {bucket_key}")
+
+        if not bucket_name or not bucket_key:
+            return False
 
         # For dynamic tasks, the xcom are stored in a list
         if ti.map_index >= 0:
