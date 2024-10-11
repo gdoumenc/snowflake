@@ -1,14 +1,14 @@
-import typing as t
 from asyncio import iscoroutine
-from functools import update_wrapper
-from inspect import Parameter
-from inspect import signature
 
+import typing as t
 from coworks import TechMicroService
 from coworks import request
 from flask import current_app
 from flask import make_response
 from flask.typing import ResponseReturnValue
+from functools import update_wrapper
+from inspect import Parameter
+from inspect import signature
 from jsonapi_pydantic.v1_0 import Error
 from jsonapi_pydantic.v1_0 import ErrorLinks
 from jsonapi_pydantic.v1_0 import Resource
@@ -112,6 +112,7 @@ class JsonApi:
                 errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
                 return toplevel_error_response(errors, status_code=e.code)
             except Exception as e:
+                current_app.logger.exception(e)
                 capture_exception(e)
                 errors = [Error(id=e.__class__.__name__, title=e.__class__.__name__, detail=str(e),
                                 status=InternalServerError.code)]
@@ -252,12 +253,9 @@ def toplevel_from_data(res: JsonApiDataMixin, include: set[str], exclude: set[st
     :param include: set of included resources.
     :param exclude: set of excluded resources.
     """
-    included: dict[str, dict] = {}
     filtered_fields = fetching_context.field_names(res.jsonapi_type) | include
-    data = res.to_ressource_data(included=included, include=filtered_fields, exclude=exclude)
-    resources = Resource(**data)
-    included_resources = [Resource(**i) for i in included.values()]
-    return TopLevel(data=resources, included=included_resources if included else None)
+    data, included = res.to_resource(include=filtered_fields, exclude=exclude)
+    return TopLevel(data=Resource(**data), included=included.values() if included else None)
 
 
 def toplevel_from_pagination(pagination: type[Pagination], include: set[str], exclude: set[str]):
@@ -267,14 +265,15 @@ def toplevel_from_pagination(pagination: type[Pagination], include: set[str], ex
     :param include: set of included resources
     :param exclude: set of excluded resources
     """
-    included: dict[str, dict] = {}
-    data = []
+    resources = []
+    included_resources: dict[str, dict] = {}
     for d in t.cast(t.Iterable, pagination):
         filtered_fields = fetching_context.field_names(d.jsonapi_type) | include
-        data.append(d.to_ressource_data(included=included, include=filtered_fields, exclude=exclude))
-    resources = [Resource(**d) for d in data]
-    included_resources = [Resource(**i) for i in included.values()]
-    toplevel = TopLevel(data=resources, included=included_resources if included else None)
+        res, incl = d.to_resource(include=filtered_fields, exclude=exclude)
+        resources.append(res)
+        included_resources.update(incl)
+    included = [i for i in included_resources.values()] if included_resources else None
+    toplevel = TopLevel(data=resources, included=included)
     fetching_context.add_pagination(toplevel, pagination)
     return toplevel
 

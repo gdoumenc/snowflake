@@ -6,10 +6,14 @@ from .coworks import entry
 from .globals import request
 from .version import __version__
 
-_all__ = (
-    TechMicroService, Blueprint, entry,
-    request,
-    __version__
+type StrList = list[str]
+type StrSet = set[str]
+type StrDict[T] = dict[str, T]
+
+__all__ = (
+    'TechMicroService', 'Blueprint', 'entry',
+    'StrList', 'StrSet', 'StrDict',
+    'request', '__version__',
 )
 
 

@@ -4,10 +4,10 @@ build-backend = "pdm.backend"
 
 [project]
 name = "coworks"
-version = "1.0.30"
+version = "1.1.3"
 description = "CoWorks is a unified compositional microservices framework using Flask/Airflow on AWS serverless technologies."
 readme = "README.rst"
-requires-python = ">= 3.11"
+requires-python = ">= 3.12"
 license = { "file" = "LICENSE.txt" }
 authors = [
     { name = "Guillaume Doumenc", email = "gdoumenc@fpr-coworks.com" }
@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: System :: Distributed Computing",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.11"
+    "Programming Language :: Python :: 3.12"
 ]
 dependencies = [
     "boto3>=1.19",
@@ -58,7 +58,7 @@ dev = [
 ignore = ["F403"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 disable_error_code = ["method-assign"]
 exclude = [
     "biz", # airflow using not compatible flask version
@@ -66,6 +66,7 @@ exclude = [
     "coworks/blueprint/mail_blueprint.py", # wip
     "coworks/blueprint/gsheets_blueprint.py", # wip
 ]
+enable_incomplete_feature = "NewGenericSyntax"
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]

@@ -3,9 +3,6 @@ import typing as t
 from collections import defaultdict
 from datetime import datetime
 
-from coworks import request
-from coworks.proxy import nr_url
-from coworks.utils import to_bool
 from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import TopLevel
 from pydantic.networks import HttpUrl
@@ -18,19 +15,45 @@ from sqlalchemy.ext.associationproxy import association_proxy
 from werkzeug.exceptions import UnprocessableEntity
 from werkzeug.local import LocalProxy
 
+from coworks import StrDict
+from coworks import StrList
+from coworks import StrSet
+from coworks import request
+from coworks.proxy import nr_url
+from coworks.utils import to_bool
 from .data import JsonApiBaseModel
 from .data import JsonApiDataMixin
 from .query import Pagination
 
 
+class FilterParameters[T](t.Iterable):
+
+    def __init__(self, filters: dict, jsonapi_type: str):
+        self.jsonapi_type = jsonapi_type
+        self._params: StrDict[StrList] = {}
+        for k in filter(lambda x: x.startswith(jsonapi_type), filters.keys()):
+            criterions = filters.get(k, [])
+            for col, value in criterions:
+                prefix = k[len(jsonapi_type):]
+                if prefix:
+                    col = prefix[1:] + '.' + col
+                self._params[col] = value
+
+    def __iter__(self) -> t.Iterator[tuple[str, t.Any]]:
+        return ((k, v) for k, v in self._params.items())
+
+    def get(self, key: str, default: T | None = None) -> StrList | T | None:
+        return self._params.get(key, default)
+
+
 class FetchingContext:
 
-    def __init__(self, include: str | None = None, fields__: dict[str, str] | None = None,
-                 filters__: dict[str, str] | None = None, sort: str | None = None,
+    def __init__(self, include: str | None = None, fields__: StrDict[str] | None = None,
+                 filters__: StrDict[str] | None = None, sort: str | None = None,
                  page__number__: int | None = None, page__size__: int | None = None, page__max__: int | None = None):
-        self.include: set[str] = set(split_parameter(include)) if include else set()
-        self._fields: dict[str, str] = fields__ if fields__ is not None else {}
-        self._sort: list[str] = list(split_parameter(sort)) if sort else []
+        self.include: StrSet = set(split_parameter(include)) if include else set()
+        self._fields: StrDict[str] = fields__ if fields__ is not None else {}
+        self._sort: StrList = list(split_parameter(sort)) if sort else []
         self.page: int = page__number__ or 1
         self.per_page: int = page__size__ or 100
         self.max_per_page: int = page__max__ or 100
@@ -141,15 +164,7 @@ class FetchingContext:
 
     def get_filter_parameters(self, jsonapi_type: str):
         """Get all filters parameters starting with the jsonapi model class name."""
-        params = []
-        for k in filter(lambda x: x.startswith(jsonapi_type), self._filters.keys()):
-            criterions = self._filters.get(k, [])
-            for col, value in criterions:
-                prefix = k[len(jsonapi_type):]
-                if prefix:
-                    col = prefix[1:] + '.' + col
-                params.append((col, value))
-        return params
+        return FilterParameters(self._filters, jsonapi_type)
 
     def sql_order_by(self, sql_model):
         """Returns a SQLAlchemy order from model using fetching order keys.

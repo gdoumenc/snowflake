@@ -432,7 +432,7 @@ class TerraformBackend:
               help="Add layer (full arn: aws:lambda:...). Must contains CoWorks at least.")
 @click.option('--memory-size', default=128,
               help="Lambda memory size (default 128).")
-@click.option('--python', '-p', type=click.Choice(['3.8', '3.9', '3.10', '3.11']), default='3.11',
+@click.option('--python', '-p', type=click.Choice(['3.12']), default='3.12',
               help="Python version for the lambda.")
 @click.option('--tf-bucket',
               help="Bucket's name if not using cloud terraform.")

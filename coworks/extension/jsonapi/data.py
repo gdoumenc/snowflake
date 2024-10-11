@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import typing as t
-from math import ceil
 from typing import overload
 
 from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import Relationship
+from jsonapi_pydantic.v1_0 import Resource
 from jsonapi_pydantic.v1_0 import ResourceIdentifier
+from math import ceil
 from pydantic import BaseModel
 from pydantic import HttpUrl
 from pydantic import field_validator
 from werkzeug.exceptions import InternalServerError
 
+from coworks import StrDict
+from coworks import StrSet
 from coworks.extension import jsonapi
 
 
@@ -92,8 +95,8 @@ class JsonApiDataMixin:
     def jsonapi_self_link(self):
         return "https://monsite.com/missing_entry"
 
-    def jsonapi_attributes(self, include: set[str], exclude: set[str]) \
-            -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
+    def jsonapi_attributes(self, include: StrSet, exclude: StrSet) \
+            -> tuple[dict[str, t.Any], StrDict[list[JsonApiRelationship] | JsonApiRelationship]]:
         """Splits the structure in attributes versus relationships.
 
         :param include: included attributes or relationships
@@ -101,17 +104,21 @@ class JsonApiDataMixin:
         """
         return {}, {}
 
-    def to_ressource_data(self, *, included: dict[str, dict], prefix: str | None = None,
-                          include: set[str] | None = None, exclude: set[str] | None = None) -> dict[str, t.Any]:
-        """Transform a simple structure data into a jsonapi ressource data.
-        SHULD BE SET ON JsonApiDataMixin
-
+    def to_resource(self, *, include: StrSet | None = None, exclude: StrSet | None = None, prefix: str | None = None) \
+            -> tuple[Resource, StrDict[Resource]]:
+        """Returns:
+         * the data of the toplelevel structure
+         * the list of included resources extracted from the data
         Beware : included is a dict of type/id key (jsonapi_type + jsonapi_id) and jsonapi ressource value
-        :param included_prefix: the prefix of the included resources (indirect inclusion)
+
+        :param include: the set of fields to add in the included resources
+        :param exclude: the set of fields to exclude from the included resources
+        :param prefix: the prefix of the included resources (indirect inclusion)
         """
         prefix = prefix or ''
         include = include or set()
         exclude = exclude or set()
+        included: StrDict[Resource] = {}
 
         # set resource data from basemodel
         attrs, rels = self.jsonapi_attributes(
@@ -166,10 +173,8 @@ class JsonApiDataMixin:
 
         if relationships:
             resource_data["relationships"] = relationships
-        if included:
-            resource_data["included"] = included
 
-        return resource_data
+        return Resource(**resource_data), included
 
 
 class JsonApiBaseModel(BaseModel, JsonApiDataMixin):
@@ -255,8 +260,8 @@ def _get_resource_links(jsonapi_basemodel) -> dict:
     raise InternalServerError("Unexpected jsonapi_self_link value")
 
 
-def _add_to_included(included, key, res: JsonApiRelationship, *, prefix, include, exclude):
-    """Adds the resource defined at key to the included list of resource.
+def _add_to_included(included: StrDict[Resource], key: str, res: JsonApiRelationship, *, prefix: str, include, exclude):
+    """Adds the resource defined at key to the included list of resources.
 
     :param included: list of included resources to increment (if not already inside).
     :param key: the key where the resource is in the parent resource.
@@ -277,9 +282,10 @@ def _add_to_included(included, key, res: JsonApiRelationship, *, prefix, include
                 filtered_fields = {new_prefix + n for n in field_names} | include
             else:
                 filtered_fields = include
-            res_included = res.resource_value.to_ressource_data(included=included, prefix=new_prefix,
+            res_included, incl = res.resource_value.to_resource(prefix=new_prefix,
                                                                 include=filtered_fields, exclude=exclude)
             included[res_key] = res_included
+            included.update(incl)
 
 
 def _remove_prefix(set_names: set[str], prefix: str) -> set[str]:
