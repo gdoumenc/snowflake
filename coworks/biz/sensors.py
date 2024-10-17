@@ -37,10 +37,11 @@ class AsyncTechMicroServiceSensor(BaseSensorOperator):
         self.cws_task_id = cws_task_id
         self.aws_conn_id = aws_conn_id
 
-    def poke(self, ti=None):
+    def poke(self, context):
         self.log.info(f"Waiting for {self.cws_task_id} result")
 
         # Get bucket information to poke
+        ti = context['ti']
         bucket_name = ti.xcom_pull(task_ids=self.cws_task_id, key='bucket')
         self.log.info(f"bucket_name: {bucket_name}")
         bucket_key = ti.xcom_pull(task_ids=self.cws_task_id, key='key')

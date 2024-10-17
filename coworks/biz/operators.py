@@ -81,13 +81,14 @@ class TechMicroServiceOperator(BaseOperator):
         self._url = self._bucket = self._key = None
         self._headers = {}
 
-    def pre_execute(self, dag_run=None, ti= None):
+    def pre_execute(self, context):
         """Gets url and token from name or parameters.
 
-        Done only before execution not on DAG loading.
+        Done only before execution not on DAG loading (context param defined in super)
         """
 
         # Creates xray trace id
+        dag_run = context['dag_run']
         start_date = dag_run.start_date.timestamp()
         trace_id = f"Root=1-{hex(int(start_date))[2:]}-{f'cws{dag_run.id:0>9}'.encode().hex()}"
         self._headers['x-amzn-trace-id'] = trace_id
@@ -100,10 +101,11 @@ class TechMicroServiceOperator(BaseOperator):
             self._url = self.url
 
         if self.asynchronous:
+            ti = context['ti']
 
             # XComs is cleared to make the task run idempotent
             ti.clear_xcom_data()
-            
+
             # Set asynchronous parameters
             self._bucket = 'coworks-airflow'
             self._key = f"s3/{dag_run.dag_id}/{ti.task_id}/{ti.job_id}"
