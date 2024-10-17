@@ -37,11 +37,10 @@ class AsyncTechMicroServiceSensor(BaseSensorOperator):
         self.cws_task_id = cws_task_id
         self.aws_conn_id = aws_conn_id
 
-    def poke(self, context):
+    def poke(self, ti=None):
         self.log.info(f"Waiting for {self.cws_task_id} result")
 
         # Get bucket information to poke
-        ti = context['ti']
         bucket_name = ti.xcom_pull(task_ids=self.cws_task_id, key='bucket')
         self.log.info(f"bucket_name: {bucket_name}")
         bucket_key = ti.xcom_pull(task_ids=self.cws_task_id, key='key')
@@ -51,9 +50,14 @@ class AsyncTechMicroServiceSensor(BaseSensorOperator):
             return False
 
         # For dynamic tasks, the xcom are stored in a list
+        self.log.info(f"Map index: {ti.map_index}")
         if ti.map_index >= 0:
-            bucket_name = bucket_name[ti.map_index]
-            bucket_key = bucket_key[ti.map_index]
+            try:
+                bucket_name = bucket_name[ti.map_index]
+                bucket_key = bucket_key[ti.map_index]
+            except IndexError:
+                # May occurs when all the mapped result is not completed
+                return False
 
         self.log.info(f"Poking for key : s3://{bucket_name}/{bucket_key}")
         hook = S3Hook(aws_conn_id=self.aws_conn_id)
