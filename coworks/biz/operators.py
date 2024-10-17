@@ -127,8 +127,8 @@ class TechMicroServiceOperator(BaseOperator):
                 if self.xcom_push_flag:
                     self._push_response(context, resp)
 
+                self.log.error(resp.text)
                 msg = f"The microservice had an error {resp.status_code}!"
-                self.log.error(msg)
                 raise AirflowFailException(msg)
 
         if self.xcom_push_flag:
@@ -163,6 +163,10 @@ class TechMicroServiceOperator(BaseOperator):
         self.log.info(f"Headers is {headers}")
         resp = requests.request(self.method.upper(), self._url, headers=headers,
                                 params=self.query_params, json=self.json, data=self.data)
+        if self.method.upper() == 'GET':
+            self.log.info(f"Query params : {self.query_params}")
+        else:
+            self.log.info(f"Json : {self.json}")
         self.log.info(f"Resulting status code : {resp.status_code}")
         return resp
 
