@@ -57,7 +57,7 @@ class AsyncTechMicroServiceSensor(BaseSensorOperator):
                 bucket_name = bucket_name[ti.map_index]
                 bucket_key = bucket_key[ti.map_index]
             except IndexError:
-                # May occurs when all the mapped result is not completed
+                # May occurs when all the mapped results are not completed
                 return False
 
         self.log.info(f"Poking for key : s3://{bucket_name}/{bucket_key}")
