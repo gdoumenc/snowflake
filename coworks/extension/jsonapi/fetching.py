@@ -5,6 +5,8 @@ from datetime import datetime
 
 from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import TopLevel
+from pydantic import BaseModel
+from pydantic import model_validator
 from pydantic.networks import HttpUrl
 from sqlalchemy import ColumnOperators
 from sqlalchemy import desc
@@ -25,25 +27,61 @@ from .data import JsonApiBaseModel
 from .data import JsonApiDataMixin
 from .query import Pagination
 
+type FilterType = tuple[str, str | None, StrList | None]
 
-class FilterParameters[T](t.Iterable):
 
-    def __init__(self, filters: dict, jsonapi_type: str):
+class Filter(BaseModel, t.Iterable[FilterType]):
+    value_as_list: bool
+    attr: str
+    oper: str | None = None
+    values: StrList | None = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def set_list(cls, data: t.Any) -> t.Any:
+        """Set values as list in all case."""
+        values = data.get('values')
+        if values and not isinstance(values, list):
+            data['values'] = [values]
+        return data
+
+    def __iter__(self):
+        """Iter with all values or simply once."""
+        if self.values and not self.value_as_list:
+            yield from ((self.attr, self.oper, value) for value in self.values)
+        yield self.attr, self.oper, self.values
+
+
+class Filters(t.Iterable[Filter]):
+
+    def __init__(self, filters: dict, jsonapi_type: str, value_as_list: bool):
         self.jsonapi_type = jsonapi_type
-        self._params: StrDict[StrList] = {}
+        self.value_as_list = value_as_list
+
+        self._params: StrDict[Filter] = {}
         for k in filter(lambda x: x.startswith(jsonapi_type), filters.keys()):
+            prefix = k[len(jsonapi_type):]
             criterions = filters.get(k, [])
-            for col, value in criterions:
-                prefix = k[len(jsonapi_type):]
+            for attr, values in criterions:
+                # filter operator
+                # idea from https://discuss.jsonapi.org/t/share-propose-a-filtering-strategy/257
+                if "____" in attr:
+                    attr, oper = attr.split('____', 1)
+                else:
+                    oper = None
+
                 if prefix:
-                    col = prefix[1:] + '.' + col
-                self._params[col] = value
+                    attr = prefix[1:] + '.' + attr
+                self._params[attr] = Filter(value_as_list=value_as_list, attr=attr, oper=oper, values=values)
 
-    def __iter__(self) -> t.Iterator[tuple[str, t.Any]]:
-        return ((k, v) for k, v in self._params.items())
+    def __iter__(self) -> t.Iterator[Filter]:
+        yield from (f for f in self._params.values())
 
-    def get(self, key: str, default: T | None = None) -> StrList | T | None:
-        return self._params.get(key, default)
+    def keys(self) -> t.Iterator[str]:
+        yield from (s for s in self._params.keys())
+
+    def get(self, key: str) -> Filter | None:
+        return self._params.get(key)
 
 
 class FetchingContext:
@@ -90,8 +128,8 @@ class FetchingContext:
     def pydantic_filters(self, base_model: JsonApiBaseModel):
         _base_model_filters: list[bool] = []
         filter_parameters = fetching_context._filters.get(base_model.jsonapi_type, {})
-        for key, value in filter_parameters:
-            name, key, oper = self.get_decomposed_key(key)
+        for key, oper, value in filter_parameters:
+            _, key = key.split('.', 1)
             if not hasattr(base_model, key):
                 msg = f"Wrong '{key}' key for '{base_model.jsonapi_type}' in filters parameters"
                 raise UnprocessableEntity(msg)
@@ -128,43 +166,43 @@ class FetchingContext:
             jsonapi_type: str = sql_model.jsonapi_type.__get__(sql_model)
         else:
             jsonapi_type = t.cast(str, sql_model.jsonapi_type)
-        for key, value in self.get_filter_parameters(jsonapi_type):
+        for filter in self.get_filter_parameters(jsonapi_type):
+            for key, oper, value in filter:
+                if '.' in key:
+                    rel_name, col_name = key.split('.', 1)
+                else:
+                    rel_name = None
+                    col_name = key
 
-            # If parameters are defined in body payload they may be not defined as list
-            if not isinstance(value, list):
-                value = [value]
+                # Column filtering
+                if not rel_name:
+                    if not hasattr(sql_model, col_name):
+                        msg = f"Wrong '{col_name}' property for sql model '{jsonapi_type}' in filters parameters"
+                        raise UnprocessableEntity(msg)
 
-            rel_name, col_name, oper = self.get_decomposed_key(key)
+                    # Appends a sql filter criterion on column
+                    column = getattr(sql_model, col_name)
+                    _type = getattr(column, 'type', None)
+                    _sql_filters.append(*sql_filter(_type, column, oper, value))
 
-            # Column filtering
-            if not rel_name:
-                if not hasattr(sql_model, col_name):
-                    msg = f"Wrong '{col_name}' property for sql model '{jsonapi_type}' in filters parameters"
-                    raise UnprocessableEntity(msg)
+                # Relationship filtering
+                else:
+                    if '.' in col_name:
+                        raise UnprocessableEntity(f"Association proxy of one level only {col_name}")
+                    if not hasattr(sql_model, rel_name):
+                        msg = f"Wrong '{rel_name}' property for sql model '{jsonapi_type}' in filters parameters"
+                        raise UnprocessableEntity(msg)
 
-                # Appends a sql filter criterion on column
-                column = getattr(sql_model, col_name)
-                _type = getattr(column, 'type', None)
-                _sql_filters.append(*sql_filter(_type, column, oper, value))
-
-            # Relationship filtering
-            else:
-                if '.' in col_name:
-                    raise UnprocessableEntity(f"Association proxy of one level only {col_name}")
-                if not hasattr(sql_model, rel_name):
-                    msg = f"Wrong '{rel_name}' property for sql model '{jsonapi_type}' in filters parameters"
-                    raise UnprocessableEntity(msg)
-
-                # Appends a sql filter criterion on an association proxy column
-                proxy = AssociationProxyInstance.for_proxy(association_proxy(rel_name, col_name), sql_model, None)
-                _type = getattr(proxy.attr[1], 'type', None)
-                _sql_filters.append(*sql_filter(_type, proxy, oper, value))
+                    # Appends a sql filter criterion on an association proxy column
+                    proxy = AssociationProxyInstance.for_proxy(association_proxy(rel_name, col_name), sql_model, None)
+                    _type = getattr(proxy.attr[1], 'type', None)
+                    _sql_filters.append(*sql_filter(_type, proxy, oper, value))
 
         return _sql_filters
 
-    def get_filter_parameters(self, jsonapi_type: str):
+    def get_filter_parameters(self, jsonapi_type: str, value_as_list: bool = True) -> Filters:
         """Get all filters parameters starting with the jsonapi model class name."""
-        return FilterParameters(self._filters, jsonapi_type)
+        return Filters(self._filters, jsonapi_type, value_as_list=value_as_list)
 
     def sql_order_by(self, sql_model):
         """Returns a SQLAlchemy order from model using fetching order keys.
@@ -221,20 +259,6 @@ class FetchingContext:
             "per_page": pagination.per_page,
         }
         toplevel.meta = meta
-
-    def get_decomposed_key(self, key) -> tuple[str | None, str, str | None]:
-        name = oper = None
-
-        # filter operator
-        # idea from https://discuss.jsonapi.org/t/share-propose-a-filtering-strategy/257
-        if "____" in key:
-            key, oper = key.split('____', 1)
-
-        # if the key is named (for allowing composition of filters)
-        if '.' in key:
-            name, key = key.split('.', 1)
-
-        return name, key, oper
 
 
 def create_fetching_context_proxy(include: str | None = None, fields__: dict | None = None,
