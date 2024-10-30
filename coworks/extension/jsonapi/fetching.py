@@ -25,7 +25,7 @@ class Filter(BaseModel, t.Iterable[FilterType]):
     comparators: dict[str, list]
 
     def add_comparator(self, oper, values):
-        self.comparators[oper] = values
+        self.comparators[oper].extend(values)
 
     def __iter__(self):
         """Iter with all values or simply once."""
