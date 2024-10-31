@@ -83,7 +83,6 @@ testpaths = [
 ]
 
 [tool.pdm.scripts]
-
 ruff = { cmd = "ruff check coworks", help = "Linting using Ruff" }
 mypy = { cmd = "mypy coworks", help = "Type checking using mypy" }
 pytest = { cmd = "pytest", help = "Unit testing using pytest" }
