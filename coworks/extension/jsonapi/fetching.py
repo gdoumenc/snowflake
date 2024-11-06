@@ -25,7 +25,10 @@ class Filter(BaseModel, t.Iterable[FilterType]):
     comparators: dict[str, list]
 
     def add_comparator(self, oper, values):
-        self.comparators[oper].extend(values)
+        if oper in self.comparators:
+            self.comparators[oper].extend(values)
+        else:
+            self.comparators[oper] = values
 
     def __iter__(self):
         """Iter with all values or simply once."""
@@ -35,11 +38,14 @@ class Filter(BaseModel, t.Iterable[FilterType]):
             else:
                 yield self.attr, oper, values
 
-    def opers(self, oper) -> t.Iterable[str]:
+    def __contains__(self, key):
+        return key in self.opers()
+
+    def opers(self) -> t.Iterable[str]:
         return self.comparators.keys()
 
     def values(self, oper) -> t.Iterable[list]:
-        return self.comparators[oper]
+        return self.comparators.get(oper, [])
 
 
 class Filters(t.Iterable[Filter]):
@@ -75,11 +81,14 @@ class Filters(t.Iterable[Filter]):
     def __iter__(self) -> t.Iterator[Filter]:
         yield from (f for f in self._params.values())
 
+    def __contains__(self, key):
+        return key in self.keys()
+
     def keys(self) -> t.Iterable[str]:
         return self._params.keys()
 
-    def get(self, key: str) -> Filter | None:
-        return self._params.get(key)
+    def get(self, key: str, default=None) -> Filter | None:
+        return self._params.get(key, default)
 
 
 class FetchingContext:

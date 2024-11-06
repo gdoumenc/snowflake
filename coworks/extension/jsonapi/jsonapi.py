@@ -1,14 +1,12 @@
-from asyncio import iscoroutine
-
 import typing as t
-from coworks import TechMicroService
-from coworks import request
-from flask import current_app
-from flask import make_response
-from flask.typing import ResponseReturnValue
+from asyncio import iscoroutine
 from functools import update_wrapper
 from inspect import Parameter
 from inspect import signature
+
+from flask import current_app
+from flask import make_response
+from flask.typing import ResponseReturnValue
 from jsonapi_pydantic.v1_0 import Error
 from jsonapi_pydantic.v1_0 import ErrorLinks
 from jsonapi_pydantic.v1_0 import Resource
@@ -23,6 +21,8 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.exceptions import InternalServerError
 from werkzeug.exceptions import NotFound
 
+from coworks import TechMicroService
+from coworks import request
 from .data import JsonApiDataMixin
 from .fetching import create_fetching_context_proxy
 from .fetching import fetching_context
@@ -136,17 +136,35 @@ class JsonApi:
 
 def jsonapi(func):
     """JSON:API decorator.
-    Transforms an entry into an SQL entry with result as JSON:API.
-
-    Must have Flask-SQLAlchemy extension installed.
+    Transforms an entry with result as JSON:API structure.
     """
+
+    async def _jsonapi_call(*args, ensure_one: bool = False, **kwargs) -> TopLevel:
+        res = func(*args, **kwargs)
+        if iscoroutine(res):
+            res = await res
+        try:
+            if isinstance(res, Query):
+                _toplevel = get_toplevel_from_query(res, ensure_one=ensure_one)
+            elif isinstance(res, ScalarResult):
+                _toplevel = get_toplevel_from_query(res, ensure_one=True)
+            elif isinstance(res, TopLevel):
+                _toplevel = res
+            else:
+                raise InternalServerError(f"Returned response {res} is not a Query, ScalarResult or TopLevel instance")
+        except NotFound:
+            if ensure_one:
+                raise
+            _toplevel = TopLevel(data=[])
+
+        return _toplevel
 
     async def _jsonapi(*args, ensure_one: bool = False, include: str | None = None,
                        fields__: dict | None = None, filters__: dict | None = None, sort: str | None = None,
                        page__number__: int | None = None, page__size__: int | None = None,
-                       page__max__: int | None = None,
-                       __neorezo__: dict | None = None, **kwargs) -> ResponseReturnValue:
-        """
+                       page__max__: int | None = None, __internal_call__: bool = False,
+                       **kwargs) -> ResponseReturnValue:
+        """ Removes JSON:API parameters and create fetching context.
 
         :param args: entry args.,
                  page: int | None = None, per_page: int | None = None
@@ -160,30 +178,17 @@ def jsonapi(func):
         :param max_per_page:
         :param kwargs: entry kwargs.
         """
-        create_fetching_context_proxy(include, fields__, filters__, sort, page__number__, page__size__, page__max__)
-        res = func(*args, **kwargs)
-        if iscoroutine(res):
-            res = await res
-        try:
-            if isinstance(res, Query):
-                _toplevel = get_toplevel_from_query(res, ensure_one=ensure_one)
-            elif isinstance(res, ScalarResult):
-                _toplevel = get_toplevel_from_query(res, ensure_one=True)
-            elif isinstance(res, TopLevel):
-                _toplevel = res
-            else:
-                raise InternalServerError(f"{res} is not a Query, ScalarResult or TopLevel instance")
-        except NotFound:
-            if ensure_one:
-                raise
-            _toplevel = TopLevel(data=[])
 
-        # Calculate status code
+        # Creates fetching context and call in JSON:API mode
+        create_fetching_context_proxy(include, fields__, filters__, sort, page__number__, page__size__, page__max__)
+        _toplevel = await _jsonapi_call(*args, ensure_one=ensure_one, **kwargs)
+
+        # Calculates status code
         if _toplevel.errors:
             return toplevel_error_response(_toplevel.errors)
-        if not _toplevel.data:
-            return _toplevel.model_dump_json(exclude_none=True), 204
-        return _toplevel.model_dump_json(exclude_none=True), 200
+        if _toplevel.data:
+            return _toplevel.model_dump_json(exclude_none=True), 200
+        return _toplevel.model_dump_json(exclude_none=True), 204
 
     # Adds JSON:API query parameters
     sig = signature(_jsonapi)
@@ -195,7 +200,12 @@ def jsonapi(func):
     sig = sig.replace(parameters=func_sig1 + jsonapi_sig + func_sig2)
     update_wrapper(_jsonapi, func)
     setattr(_jsonapi, '__signature__', sig)
+    setattr(_jsonapi, '__call_jsonapi__', _jsonapi_call)
     return _jsonapi
+
+
+async def call_json_entry(blueprint, entry):
+    return await entry.__call_jsonapi__(blueprint)
 
 
 def get_toplevel_from_query(query: Query | Scalar, *, ensure_one: bool, include: set[str] | None = None,
@@ -278,7 +288,7 @@ def toplevel_from_pagination(pagination: type[Pagination], include: set[str], ex
     return toplevel
 
 
-def toplevel_error_response(errors: Errors, *, status_code=None):
+def toplevel_error_response(errors: Errors, *, status_code=None) -> ResponseReturnValue:
     toplevel = TopLevel(errors=errors).model_dump_json(exclude_none=True)
     if status_code is None:
         status_code = max((err.status for err in errors))

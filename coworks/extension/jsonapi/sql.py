@@ -1,6 +1,6 @@
 import typing as t
+from coworks.utils import to_bool
 from datetime import datetime
-
 from sqlalchemy import ColumnOperators
 from sqlalchemy import desc
 from sqlalchemy import inspect
@@ -9,7 +9,6 @@ from sqlalchemy.ext.associationproxy import AssociationProxyInstance
 from sqlalchemy.ext.associationproxy import association_proxy
 from werkzeug.exceptions import UnprocessableEntity
 
-from coworks.utils import to_bool
 from .data import JsonApiDataMixin
 from .fetching import fetching_context
 
@@ -135,9 +134,9 @@ def str_filter(column, oper, value) -> list[ColumnOperators]:
     if oper == 'neq':
         return [not_(column.in_(value))]
     if oper == 'ilike':
-        return [column.ilike('%' + str(v) + '%') for v in value]
+        return [column.ilike(v) for v in value]
     if oper == 'nilike':
-        return [not_(column.ilike('%' + str(v) + '%')) for v in value]
+        return [not_(column.ilike(v)) for v in value]
     if oper == 'contains':
         return [column.contains(str(v)) for v in value]
     if oper == 'ncontains':
