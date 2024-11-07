@@ -81,15 +81,18 @@ class JsonApi:
             if 'application/vnd.api+json' not in request.headers.getlist('accept'):
                 return handle_http_exception(e)
 
-            try:
-                return handle_http_exception(e)
-            except JsonApiError as e:
+            err = handle_http_exception(e)
+            if isinstance(err, JsonApiError):
                 capture_exception(e)
                 return toplevel_error_response(e.errors)
-            except HTTPException as e:
+            if isinstance(err, HTTPException):
                 capture_exception(e)
                 errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
                 return toplevel_error_response(errors, status_code=e.code)
+            capture_exception(e)
+            errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
+            return toplevel_error_response(errors, status_code=InternalServerError.code)
+
 
         def _handle_user_exception(e):
             if 'application/vnd.api+json' not in request.headers.getlist('accept'):
