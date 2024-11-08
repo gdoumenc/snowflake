@@ -36,7 +36,7 @@ class Filter(BaseModel, t.Iterable[FilterType]):
             if values is None:
                 yield [] if self.value_as_iterator else None
 
-            if not self.value_as_iterator and isinstance(values, t.Iterator) and not isinstance(values, str):
+            if self.value_as_iterator and not isinstance(values, str):
                 yield from ((self.attr, oper, value) for value in values)
             else:
                 yield self.attr, oper, values
@@ -88,8 +88,11 @@ class Filters(t.Iterable[Filter]):
     def keys(self) -> t.Iterable[str]:
         return self._params.keys()
 
-    def get(self, key: str, default=None) -> Filter | None:
-        return self._params.get(key, default)
+    def get(self, key: str, default=None, value_as_iterator=None) -> Filter | None:
+        filter = self._params.get(key, default)
+        if filter and value_as_iterator:
+            filter.value_as_iterator = value_as_iterator
+        return filter
 
 
 class FetchingContext:
