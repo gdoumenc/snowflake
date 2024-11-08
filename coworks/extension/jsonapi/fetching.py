@@ -1,7 +1,12 @@
-import contextlib
-import typing as t
 from collections import defaultdict
 
+import contextlib
+import typing as t
+from coworks import StrDict
+from coworks import StrList
+from coworks import StrSet
+from coworks import request
+from coworks.proxy import nr_url
 from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import TopLevel
 from pydantic import BaseModel
@@ -9,11 +14,6 @@ from pydantic.networks import HttpUrl
 from werkzeug.exceptions import UnprocessableEntity
 from werkzeug.local import LocalProxy
 
-from coworks import StrDict
-from coworks import StrList
-from coworks import StrSet
-from coworks import request
-from coworks.proxy import nr_url
 from .query import Pagination
 
 type FilterType = tuple[str, str | None, StrList | None]
@@ -36,7 +36,7 @@ class Filter(BaseModel, t.Iterable[FilterType]):
             if values is None:
                 yield [] if self.value_as_iterator else None
 
-            if not isinstance(str, values) and isinstance(str, t.Iterator) and not self.value_as_iterator:
+            if not self.value_as_iterator and isinstance(values, t.Iterator) and not isinstance(values, str):
                 yield from ((self.attr, oper, value) for value in values)
             else:
                 yield self.attr, oper, values
