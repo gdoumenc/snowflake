@@ -1,12 +1,7 @@
-from collections import defaultdict
-
 import contextlib
 import typing as t
-from coworks import StrDict
-from coworks import StrList
-from coworks import StrSet
-from coworks import request
-from coworks.proxy import nr_url
+from collections import defaultdict
+
 from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import TopLevel
 from pydantic import BaseModel
@@ -14,15 +9,20 @@ from pydantic.networks import HttpUrl
 from werkzeug.exceptions import UnprocessableEntity
 from werkzeug.local import LocalProxy
 
+from coworks import StrDict
+from coworks import StrList
+from coworks import StrSet
+from coworks import request
+from coworks.proxy import nr_url
 from .query import Pagination
 
 type FilterType = tuple[str, str | None, StrList | None]
 
 
 class Filter(BaseModel, t.Iterable[FilterType]):
-    value_as_list: bool
+    value_as_iterator: bool
     attr: str
-    comparators: dict[str, list]
+    comparators: dict[str, t.Any]
 
     def add_comparator(self, oper, values):
         if oper in self.comparators:
@@ -33,7 +33,10 @@ class Filter(BaseModel, t.Iterable[FilterType]):
     def __iter__(self):
         """Iter with all values or simply once."""
         for oper, values in self.comparators.items():
-            if values and not self.value_as_list:
+            if values is None:
+                yield [] if self.value_as_iterator else None
+
+            if not isinstance(str, values) and isinstance(str, t.Iterator) and not self.value_as_iterator:
                 yield from ((self.attr, oper, value) for value in values)
             else:
                 yield self.attr, oper, values
@@ -50,9 +53,9 @@ class Filter(BaseModel, t.Iterable[FilterType]):
 
 class Filters(t.Iterable[Filter]):
 
-    def __init__(self, filters: dict, jsonapi_type: str, none_oper: str, value_as_list: bool):
+    def __init__(self, filters: dict, jsonapi_type: str, none_oper: str, value_as_iterator: bool):
         self.jsonapi_type = jsonapi_type
-        self.value_as_list = value_as_list
+        self.value_as_iterator = value_as_iterator
 
         self._params: StrDict[Filter] = {}
         for k in filter(lambda x: x.startswith(jsonapi_type), filters.keys()):
@@ -70,13 +73,11 @@ class Filters(t.Iterable[Filter]):
                 if prefix:
                     attr = prefix[1:] + '.' + attr
 
-                if values and not isinstance(values, list):
-                    values = [values]
-
                 if attr in self._params:
                     self._params[attr].add_comparator(oper, values)
                 else:
-                    self._params[attr] = Filter(value_as_list=value_as_list, attr=attr, comparators={oper: values})
+                    self._params[attr] = Filter(value_as_iterator=value_as_iterator, attr=attr,
+                                                comparators={oper: values})
 
     def __iter__(self) -> t.Iterator[Filter]:
         yield from (f for f in self._params.values())
@@ -132,9 +133,9 @@ class FetchingContext:
 
         return set(split_parameter(field))
 
-    def get_filter_parameters(self, jsonapi_type: str, *, none_oper='eq', value_as_list: bool = True) -> Filters:
+    def get_filter_parameters(self, jsonapi_type: str, *, none_oper='eq', value_as_iterator: bool = True) -> Filters:
         """Get all filters parameters starting with the jsonapi model class name."""
-        return Filters(self._filters, jsonapi_type, none_oper=none_oper, value_as_list=value_as_list)
+        return Filters(self._filters, jsonapi_type, none_oper=none_oper, value_as_iterator=value_as_iterator)
 
     @staticmethod
     def add_pagination(toplevel: TopLevel, pagination: type[Pagination]):
