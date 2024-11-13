@@ -23,7 +23,7 @@ def sql_filter(sql_model: type[JsonApiDataMixin]):
         jsonapi_type: str = sql_model.jsonapi_type.__get__(sql_model)
     else:
         jsonapi_type = t.cast(str, sql_model.jsonapi_type)
-    for filter in fetching_context.get_filter_parameters(jsonapi_type):
+    for filter in fetching_context.get_filter_parameters(jsonapi_type ,value_as_iterator=False):
         for key, oper, value in filter:
             if '.' in key:
                 rel_name, col_name = key.split('.', 1)

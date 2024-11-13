@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "coworks"
-version = "1.1.15"
+version = "1.1.17"
 description = "CoWorks is a unified compositional microservices framework using Flask/Airflow on AWS serverless technologies."
 readme = "README.rst"
 requires-python = ">= 3.12"
@@ -66,7 +66,6 @@ exclude = [
     "coworks/blueprint/mail_blueprint.py", # wip
     "coworks/blueprint/gsheets_blueprint.py", # wip
 ]
-enable_incomplete_feature = "NewGenericSyntax"
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]

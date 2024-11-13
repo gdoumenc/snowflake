@@ -29,18 +29,18 @@ from werkzeug.exceptions import InternalServerError
 from werkzeug.exceptions import Unauthorized
 from werkzeug.routing import Rule
 
-from .globals import request
 from .const import BIZ_BUCKET_HEADER_KEY
 from .const import BIZ_KEY_HEADER_KEY
+from .globals import request
 from .proxy import HTTP_METHODS
 from .proxy import create_cws_proxy
-from .utils import get_app_stage
 from .proxy import get_cws_annotations
 from .proxy import is_arg_parameter
 from .proxy import is_kwarg_parameter
 from .proxy import make_absolute
 from .proxy import path_join
 from .proxy import trim_underscores
+from .utils import get_app_stage
 from .wrappers import CoworksMapAdapter
 from .wrappers import CoworksRequest
 from .wrappers import CoworksResponse
@@ -549,7 +549,7 @@ class TechMicroService(Flask):
             endpoint = f"{prefix}{fun.__name__}"
 
             # Creates the entry
-            url_prefix = bp_state.url_prefix if bp_state else None
+            url_prefix: str = bp_state.url_prefix if bp_state else ''
             rule = make_absolute(entry_path, url_prefix)
             for r in self.url_map.iter_rules():
                 if r.rule == rule and method in (r.methods or []):
