@@ -9,7 +9,6 @@ from flask import make_response
 from flask.typing import ResponseReturnValue
 from jsonapi_pydantic.v1_0 import Error
 from jsonapi_pydantic.v1_0 import ErrorLinks
-from jsonapi_pydantic.v1_0 import Resource
 from jsonapi_pydantic.v1_0 import TopLevel
 from jsonapi_pydantic.v1_0.toplevel import Errors
 from pydantic import ValidationError
@@ -92,7 +91,6 @@ class JsonApi:
             capture_exception(e)
             errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
             return toplevel_error_response(errors, status_code=InternalServerError.code)
-
 
         def _handle_user_exception(e):
             if 'application/vnd.api+json' not in request.headers.getlist('accept'):
@@ -268,7 +266,7 @@ def toplevel_from_data(res: JsonApiDataMixin, include: set[str], exclude: set[st
     """
     filtered_fields = fetching_context.field_names(res.jsonapi_type) | include
     data, included = res.to_resource(include=filtered_fields, exclude=exclude)
-    return TopLevel(data=Resource(**data), included=included.values() if included else None)
+    return TopLevel(data=data, included=included.values() if included else None)
 
 
 def toplevel_from_pagination(pagination: type[Pagination], include: set[str], exclude: set[str]):
