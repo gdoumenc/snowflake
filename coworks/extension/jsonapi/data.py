@@ -1,21 +1,20 @@
 from __future__ import annotations
 
 import typing as t
-from typing import overload
-
-from jsonapi_pydantic.v1_0 import Link
-from jsonapi_pydantic.v1_0 import Relationship
-from jsonapi_pydantic.v1_0 import Resource
-from jsonapi_pydantic.v1_0 import ResourceIdentifier
 from math import ceil
-from pydantic import BaseModel
-from pydantic import HttpUrl
-from pydantic import field_validator
-from werkzeug.exceptions import InternalServerError
+from typing import overload
 
 from coworks import StrDict
 from coworks import StrSet
 from coworks.extension import jsonapi
+from jsonapi_pydantic.v1_0 import Link
+from jsonapi_pydantic.v1_0 import Relationship
+from jsonapi_pydantic.v1_0 import Resource
+from jsonapi_pydantic.v1_0 import ResourceIdentifier
+from pydantic import BaseModel
+from pydantic import HttpUrl
+from pydantic import field_validator
+from werkzeug.exceptions import InternalServerError
 
 
 class CursorPagination(BaseModel):
@@ -69,7 +68,7 @@ class JsonApiRelationship:
     The id may be given independently of the value.
     """
 
-    def __init__(self, *, type_, id_, value: JsonApiDataMixin | None = None):
+    def __init__(self, *, type_: str, id_: str, value: JsonApiDataMixin | None = None):
         self.jsonapi_type = type_
         self.jsonapi_id = id_
         self.value = value
@@ -104,7 +103,8 @@ class JsonApiDataMixin:
         """
         return {}, {}
 
-    def to_resource(self, *, include: StrSet | None = None, exclude: StrSet | None = None, prefix: str | None = None) \
+    def to_resource(self, *, included: StrDict[Resource] | None = None, include: StrSet | None = None,
+                    exclude: StrSet | None = None, prefix: str | None = None) \
             -> tuple[Resource, StrDict[Resource]]:
         """Returns:
          * the data of the toplelevel structure
@@ -118,7 +118,7 @@ class JsonApiDataMixin:
         prefix = prefix or ''
         include = include or set()
         exclude = exclude or set()
-        included: StrDict[Resource] = {}
+        included = included or {}
 
         # set resource data from basemodel
         attrs, rels = self.jsonapi_attributes(
@@ -270,7 +270,9 @@ def _add_to_included(included: StrDict[Resource], key: str, res: JsonApiRelation
     :param exclude: set of excluded resources
     :param included_prefix: dot separated path in resource.
     """
-    res_key = res.jsonapi_type + res.jsonapi_id
+    res_key = _included_key(res)
+
+    # Adds only if not already added in the included set
     if res_key not in included:
         if res.resource_value:
             included[res_key] = None
@@ -282,10 +284,14 @@ def _add_to_included(included: StrDict[Resource], key: str, res: JsonApiRelation
                 filtered_fields = {new_prefix + n for n in field_names} | include
             else:
                 filtered_fields = include
-            res_included, incl = res.resource_value.to_resource(prefix=new_prefix,
+            res_included, incl = res.resource_value.to_resource(included=included, prefix=new_prefix,
                                                                 include=filtered_fields, exclude=exclude)
             included[res_key] = res_included
             included.update(incl)
+
+
+def _included_key(res: JsonApiRelationship) -> str:
+    return res.jsonapi_type + res.jsonapi_id
 
 
 def _remove_prefix(set_names: set[str], prefix: str) -> set[str]:
