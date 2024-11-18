@@ -184,7 +184,11 @@ class JsonApiBaseModel(BaseModel, JsonApiDataMixin):
             -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
         attrs: dict[str, t.Any] = {}
         rels: dict[str, list[JsonApiRelationship] | JsonApiRelationship] = {}
-        for k, v in self:
+        for k in {*self.model_fields.keys(), *self.model_computed_fields.keys()}:
+            if (include and k not in include) or k in exclude:
+                continue
+
+            v = getattr(self, k)
             if self._is_basemodel(v):
                 rels[k] = self.create_relationship(v)
             elif not include or k in include:

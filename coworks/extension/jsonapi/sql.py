@@ -1,6 +1,6 @@
 import typing as t
-from coworks.utils import to_bool
 from datetime import datetime
+
 from sqlalchemy import ColumnOperators
 from sqlalchemy import desc
 from sqlalchemy import inspect
@@ -9,6 +9,7 @@ from sqlalchemy.ext.associationproxy import AssociationProxyInstance
 from sqlalchemy.ext.associationproxy import association_proxy
 from werkzeug.exceptions import UnprocessableEntity
 
+from coworks.utils import to_bool
 from .data import JsonApiDataMixin
 from .fetching import fetching_context
 
@@ -23,7 +24,7 @@ def sql_filter(sql_model: type[JsonApiDataMixin]):
         jsonapi_type: str = sql_model.jsonapi_type.__get__(sql_model)
     else:
         jsonapi_type = t.cast(str, sql_model.jsonapi_type)
-    for filter in fetching_context.get_filter_parameters(jsonapi_type ,value_as_iterator=False):
+    for filter in fetching_context.get_filter_parameters(jsonapi_type, value_as_iterator=False):
         for key, oper, value in filter:
             if '.' in key:
                 rel_name, col_name = key.split('.', 1)

@@ -52,10 +52,6 @@ class Filter(BaseModel, t.Iterable[FilterType]):
         values = self.comparators.get(oper, [])
         if values is None:
             return [] if value_as_iterator else None
-
-        if value_as_iterator:
-            return values if isinstance(values, list) else [values]
-
         return values
 
 
@@ -84,6 +80,8 @@ class Filters(t.Iterable[Filter]):
                 if attr in self._params:
                     self._params[attr].add_comparator(oper, values)
                 else:
+                    if not isinstance(values, list):
+                        values = [values]
                     self._params[attr] = Filter(value_as_iterator=value_as_iterator, attr=attr,
                                                 comparators={oper: values})
 
