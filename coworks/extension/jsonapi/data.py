@@ -4,9 +4,6 @@ import typing as t
 from math import ceil
 from typing import overload
 
-from coworks import StrDict
-from coworks import StrSet
-from coworks.extension import jsonapi
 from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import Relationship
 from jsonapi_pydantic.v1_0 import Resource
@@ -15,6 +12,10 @@ from pydantic import BaseModel
 from pydantic import HttpUrl
 from pydantic import field_validator
 from werkzeug.exceptions import InternalServerError
+
+from coworks import StrDict
+from coworks import StrSet
+from coworks.extension import jsonapi
 
 
 class CursorPagination(BaseModel):
@@ -116,7 +117,7 @@ class JsonApiDataMixin:
         :param prefix: the prefix of the included resources (indirect inclusion)
         """
         prefix = prefix or ''
-        include = include or set()
+        include = include or jsonapi.fetching_context.field_names(self.jsonapi_type)
         exclude = exclude or set()
         included = included or {}
 
@@ -168,7 +169,7 @@ class JsonApiDataMixin:
             "id": _id,
             "lid": None,
             "attributes": attrs,
-            "links": _get_resource_links(self)
+            # "links": _get_resource_links(self)
         }
 
         if relationships:

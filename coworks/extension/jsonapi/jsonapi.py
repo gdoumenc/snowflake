@@ -4,6 +4,8 @@ from functools import update_wrapper
 from inspect import Parameter
 from inspect import signature
 
+from coworks import TechMicroService
+from coworks import request
 from flask import current_app
 from flask import make_response
 from flask.typing import ResponseReturnValue
@@ -20,8 +22,6 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.exceptions import InternalServerError
 from werkzeug.exceptions import NotFound
 
-from coworks import TechMicroService
-from coworks import request
 from .data import JsonApiDataMixin
 from .fetching import create_fetching_context_proxy
 from .fetching import fetching_context
@@ -82,50 +82,49 @@ class JsonApi:
 
             err = handle_http_exception(e)
             if isinstance(err, JsonApiError):
-                capture_exception(e)
+                self.capture_exception(e)
                 return toplevel_error_response(e.errors)
             if isinstance(err, HTTPException):
-                capture_exception(e)
+                self.capture_exception(e)
                 errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
                 return toplevel_error_response(errors, status_code=e.code)
-            capture_exception(e)
+            self.capture_exception(e)
             errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
             return toplevel_error_response(errors, status_code=InternalServerError.code)
 
         def _handle_user_exception(e):
             if 'application/vnd.api+json' not in request.headers.getlist('accept'):
                 return handle_user_exception(e)
-
             try:
                 return handle_user_exception(e)
             except JsonApiError as e:
-                capture_exception(e)
+                self.capture_exception(e)
                 return toplevel_error_response(e.errors)
             except ValidationError as e:
-                capture_exception(e)
+                self.capture_exception(e)
                 errors = [Error(id="", status=BadRequest.code, code=err['type'],
                                 links=ErrorLinks(about=err['url']),  # type: ignore[typeddict-item]
                                 title=err['msg'], detail=str(err['loc'])) for err in e.errors()]
                 errors.append(Error(id="", status=BadRequest.code, title=e.title, detail=str(e)))
                 return toplevel_error_response(errors)
             except HTTPException as e:
-                capture_exception(e)
+                self.capture_exception(e)
                 errors = [Error(id=e.name, title=e.name, detail=e.description, status=e.code)]
                 return toplevel_error_response(errors, status_code=e.code)
             except Exception as e:
                 current_app.logger.exception(e)
-                capture_exception(e)
+                self.capture_exception(e)
                 errors = [Error(id=e.__class__.__name__, title=e.__class__.__name__, detail=str(e),
                                 status=InternalServerError.code)]
                 return toplevel_error_response(errors, status_code=InternalServerError.code)
-
-        def capture_exception(e):
-            app.full_logger_error(e)
 
         app.handle_http_exception = _handle_http_exception
         app.handle_user_exception = _handle_user_exception
 
         app.after_request(self._change_content_type)
+
+    def capture_exception(self, e):
+        self.app.full_logger_error(e)
 
     def _change_content_type(self, response):
         if 'application/vnd.api+json' not in request.headers.getlist('accept'):

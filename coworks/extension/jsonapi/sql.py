@@ -1,6 +1,7 @@
 import typing as t
 from datetime import datetime
 
+from coworks.utils import to_bool
 from sqlalchemy import ColumnOperators
 from sqlalchemy import desc
 from sqlalchemy import inspect
@@ -9,7 +10,6 @@ from sqlalchemy.ext.associationproxy import AssociationProxyInstance
 from sqlalchemy.ext.associationproxy import association_proxy
 from werkzeug.exceptions import UnprocessableEntity
 
-from coworks.utils import to_bool
 from .data import JsonApiDataMixin
 from .fetching import fetching_context
 
@@ -41,7 +41,7 @@ def sql_filter(sql_model: type[JsonApiDataMixin]):
                 # Appends a sql filter criterion on column
                 column = getattr(sql_model, col_name)
                 _type = getattr(column, 'type', None)
-                _sql_filters.append(*typed_filter(_type, column, oper, value))
+                _sql_filters.extend(typed_filter(_type, column, oper, value))
 
             # Relationship filtering
             else:
@@ -54,7 +54,7 @@ def sql_filter(sql_model: type[JsonApiDataMixin]):
                 # Appends a sql filter criterion on an association proxy column
                 proxy = AssociationProxyInstance.for_proxy(association_proxy(rel_name, col_name), sql_model, None)
                 _type = getattr(proxy.attr[1], 'type', None)
-                _sql_filters.append(*typed_filter(_type, proxy, oper, value))
+                _sql_filters.extend(typed_filter(_type, proxy, oper, value))
 
     return _sql_filters
 
@@ -154,7 +154,7 @@ def int_filter(column, oper, value) -> list[ColumnOperators]:
     """Integer filter."""
     oper = oper or 'eq'
     if oper == 'in':
-        return [column.in_([int(i) for i in v.split(',')]) for v in value]
+        return [column.in_([int(v) for v in value])]
     else:
         return [sort_operator(column, oper, int(v)) for v in value]
 
