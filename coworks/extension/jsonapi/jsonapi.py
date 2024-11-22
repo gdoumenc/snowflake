@@ -4,8 +4,6 @@ from functools import update_wrapper
 from inspect import Parameter
 from inspect import signature
 
-from coworks import TechMicroService
-from coworks import request
 from flask import current_app
 from flask import make_response
 from flask.typing import ResponseReturnValue
@@ -22,6 +20,8 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.exceptions import InternalServerError
 from werkzeug.exceptions import NotFound
 
+from coworks import TechMicroService
+from coworks import request
 from .data import JsonApiDataMixin
 from .fetching import create_fetching_context_proxy
 from .fetching import fetching_context
@@ -124,7 +124,8 @@ class JsonApi:
         app.after_request(self._change_content_type)
 
     def capture_exception(self, e):
-        self.app.full_logger_error(e)
+        if self.app:
+            self.app.full_logger_error(e)
 
     def _change_content_type(self, response):
         if 'application/vnd.api+json' not in request.headers.getlist('accept'):
