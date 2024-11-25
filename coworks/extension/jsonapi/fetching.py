@@ -5,7 +5,7 @@ from collections import defaultdict
 from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import TopLevel
 from pydantic import BaseModel
-from pydantic.networks import HttpUrl
+from pydantic import HttpUrl
 from werkzeug.exceptions import UnprocessableEntity
 from werkzeug.local import LocalProxy
 

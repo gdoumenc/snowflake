@@ -4,6 +4,9 @@ import typing as t
 from math import ceil
 from typing import overload
 
+from coworks import StrDict
+from coworks import StrSet
+from coworks.extension import jsonapi
 from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import Relationship
 from jsonapi_pydantic.v1_0 import Resource
@@ -12,10 +15,6 @@ from pydantic import BaseModel
 from pydantic import HttpUrl
 from pydantic import field_validator
 from werkzeug.exceptions import InternalServerError
-
-from coworks import StrDict
-from coworks import StrSet
-from coworks.extension import jsonapi
 
 
 class CursorPagination(BaseModel):
@@ -183,18 +182,21 @@ class JsonApiBaseModel(BaseModel, JsonApiDataMixin):
 
     def jsonapi_attributes(self, include: set[str], exclude: set[str]) \
             -> tuple[dict[str, t.Any], dict[str, list[JsonApiRelationship] | JsonApiRelationship]]:
-        attrs: dict[str, t.Any] = {}
         rels: dict[str, list[JsonApiRelationship] | JsonApiRelationship] = {}
+        export_include: set[str] = set()
+        export_exclude: set[str] = set()
         for k in {*self.model_fields.keys(), *self.model_computed_fields.keys()}:
             if (include and k not in include) or k in exclude:
+                export_exclude.add(k)
                 continue
 
             v = getattr(self, k)
             if self._is_basemodel(v):
                 rels[k] = self.create_relationship(v)
+                export_exclude.add(k)
             elif not include or k in include:
-                attrs[k] = v
-        return attrs, rels
+                export_include.add(k)
+        return self.model_dump(include=export_include, exclude=export_exclude), rels
 
     @overload
     def create_relationship(self, value: JsonApiBaseModel) -> JsonApiRelationship:
