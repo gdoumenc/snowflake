@@ -120,7 +120,7 @@ class TestClass:
                 terraform.generate_file("deploy.j2", fp.name, **options)
                 fp.seek(0)
                 lines = fp.readlines()
-                assert len(lines) == 2049
+                assert len(lines) == 2041
                 assert lines[1].strip() == 'alias = "envtechms"'.encode('utf-8')
 
     @mock.patch.dict(os.environ, {"test": "local", "FLASK_RUN_FROM_CLI": "true"})
@@ -175,5 +175,5 @@ class TestClass:
                 terraform.generate_file("deploy.j2", fp.name, **options)
                 fp.seek(0)
                 lines = fp.readlines()
-                assert len(lines) == 2049
+                assert len(lines) == 2041
                 assert lines[1].strip() == 'alias = "envtechms"'.encode('utf-8')

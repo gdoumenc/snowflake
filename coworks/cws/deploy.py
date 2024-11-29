@@ -7,7 +7,6 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
-import typing as t
 from datetime import datetime
 from functools import cached_property
 from functools import partial
@@ -87,12 +86,6 @@ class TerraformResource(BaseModel):
     def parent_is_root(self) -> bool:
         return self.parent_uid == ''
 
-    @cached_property
-    def no_cors_methods(self) -> t.Iterator[set[str] | None]:
-        if not self.rules:
-            return iter(())
-        return (rule.methods for rule in self.rules if getattr(rule, 'cws_no_cors', None))
-
     def __repr__(self):
         return f"{self.uid}:{self.rules}"
 
@@ -147,7 +140,6 @@ class Terraform:
                 view_function = self.app_context.app.view_functions.get(rule_.endpoint)
                 setattr(rule_, 'cws_binary_headers', get_cws_annotations(view_function, '__CWS_BINARY_HEADERS'))
                 setattr(rule_, 'cws_no_auth', get_cws_annotations(view_function, '__CWS_NO_AUTH'))
-                setattr(rule_, 'cws_no_cors', get_cws_annotations(view_function, '__CWS_NO_CORS'))
 
             # Creates terraform ressources if it doesn't exist.
             uid = resource.uid

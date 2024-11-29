@@ -73,26 +73,26 @@ class TestClass:
             routes = json.loads(response.get_data(as_text=True))
             assert routes["/"]['GET'] == {
                 "doc": "Root access.", "signature": "()", "endpoint": "get",
-                'binary_headers': None, 'no_auth': False, 'no_cors': True
+                'binary_headers': None, 'no_auth': False
             }
             assert routes["/"]['POST'] == {
                 "doc": "Root access.", "signature": "()", "endpoint": "post",
-                'binary_headers': None, 'no_auth': False, 'no_cors': True
+                'binary_headers': None, 'no_auth': False
             }
             assert routes["/content/<value>"]['POST'] == {
                 "doc": "Add content.", "signature": "(value, other=none)", "endpoint": "post_content",
-                'binary_headers': None, 'no_auth': False, 'no_cors': True
+                'binary_headers': None, 'no_auth': False
             }
             assert routes["/contentannotated/<value>"]['POST'] == {
                 "doc": "Add content.", "signature": "(value:<class 'int'>, other:<class 'str'>=none)",
                 'endpoint': "post_contentannotated",
-                'binary_headers': None, 'no_auth': False, 'no_cors': True
+                'binary_headers': None, 'no_auth': False
             }
             assert routes["/admin/route"]['GET']['signature'] == "(prefix=None, blueprint=None)"
             assert routes["/admin/route"]['GET']['endpoint'] == "admin.get_route"
             assert routes["/list/<values>"]['GET'] == {
                 "signature": "(values:[<class 'int'>])", 'endpoint': 'get_list',
-                'binary_headers': None, 'no_auth': True, 'no_cors': True
+                'binary_headers': None, 'no_auth': True
             }
 
             response = c.get('/admin/route', headers={'Authorization': 'token'})

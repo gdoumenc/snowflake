@@ -31,7 +31,7 @@ class Admin(Blueprint):
         super().__init__(name=name, **kwargs)
         self.models = {model.__name__: model for model in models} if models else {}
 
-    @entry(no_auth=True, no_cors=True)
+    @entry(no_auth=True)
     def get(self):
         """Returns the markdown documentation associated to this microservice.
         """
@@ -51,7 +51,7 @@ class Admin(Blueprint):
         content = self.header_template + '<hr/>' + content + '<hr/>' + bottom + '\n'
         return content, 200, headers
 
-    @entry(no_auth=True, no_cors=True)
+    @entry(no_auth=True)
     # @jsonapi(type)
     def get__schema(self, model):
         """Returns the JSON schemas of the model.
@@ -126,7 +126,6 @@ class Admin(Blueprint):
                     'endpoint': rule.endpoint,
                     'binary_headers': get_cws_annotations(function_called, '__CWS_BINARY_HEADERS'),
                     'no_auth': get_cws_annotations(function_called, '__CWS_NO_AUTH'),
-                    'no_cors': get_cws_annotations(function_called, '__CWS_NO_CORS'),
                 }
 
                 from_blueprint = get_cws_annotations(function_called, '__CWS_FROM_BLUEPRINT', None)

@@ -61,18 +61,16 @@ else:
 
 
 def entry(fun: t.Optional[t.Callable] = None, binary_headers: dict[str, str] | None = None,
-          stage: str | t.Iterable[str] | None = None,
-          no_auth: bool = False, no_cors: bool = True) -> t.Callable:
+          stage: str | t.Iterable[str] | None = None, no_auth: bool = False) -> t.Callable:
     """Decorator to create a microservice entry point from function name.
 
     :param fun: the entry function.
     :param binary_headers: force default content-type.
     :param stage: entry defined only for this stage(s).
     :param no_auth: set authorizer by default.
-    :param no_cors: set CORS by default.
     """
     if fun is None:
-        return partial(entry, binary_headers=binary_headers, stage=stage, no_auth=no_auth, no_cors=no_cors)
+        return partial(entry, binary_headers=binary_headers, stage=stage, no_auth=no_auth)
 
     def get_path(start):
         name_ = fun.__name__[start:]
@@ -98,7 +96,6 @@ def entry(fun: t.Optional[t.Callable] = None, binary_headers: dict[str, str] | N
     fun.__CWS_BINARY_HEADERS = binary_headers  # type: ignore[attr-defined]
     fun.__CWS_NO_AUTH = no_auth  # type: ignore[attr-defined]
     fun.__CWS_STAGES = stage if isinstance(stage, list) else [stage]  # type: ignore[attr-defined]
-    fun.__CWS_NO_CORS = no_cors  # type: ignore[attr-defined]
 
     return fun
 
@@ -542,7 +539,6 @@ class TechMicroService(Flask):
             proxy = create_cws_proxy(scaffold, fun, args, kwargs, generic_kwargs)
             proxy.__CWS_BINARY_HEADERS = get_cws_annotations(fun, '__CWS_BINARY_HEADERS')
             proxy.__CWS_NO_AUTH = get_cws_annotations(fun, '__CWS_NO_AUTH')
-            proxy.__CWS_NO_CORS = get_cws_annotations(fun, '__CWS_NO_CORS')
             fun.__CWS_FROM_BLUEPRINT = bp_state.blueprint.name if bp_state else None
 
             prefix = f"{bp_state.blueprint.name}." if bp_state else ''
