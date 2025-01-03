@@ -205,8 +205,8 @@ def jsonapi(func):
     return _jsonapi
 
 
-async def call_json_entry(blueprint, entry):
-    return await entry.__call_jsonapi__(blueprint)
+async def call_json_entry(blueprint, entry, *args, **kwargs) -> ResponseReturnValue:
+    return await entry.__call_jsonapi__(blueprint, *args, **kwargs)
 
 
 def get_toplevel_from_query(query: Query | Scalar, *, ensure_one: bool, include: set[str] | None = None,

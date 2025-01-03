@@ -90,10 +90,8 @@ test = { composite = ["ruff", "mypy", "pytest"] }
 on_github = { composite = ["ruff", "mypy", "github_pytest"] }
 plugins = { shell = "mkdir -p dist; zip -r dist/plugins.zip coworks/operators.py coworks/sensors.py coworks/biz/*" }
 pre_build = { cmd = "pdm test" }
-pre_fury = { cmd = "pdm build" }
-fury.env = { VERSION = 'grep -m 1 version pyproject.toml | tr -s " "| tr -d \" | cut -d" " -f3' }
-fury.shell = 'fury push dist/coworks-$(sh -c "${VERSION}")-py3-none-any.whl'
-fury.help = "Deploy the package on Gemfury"
+pre_deploy = {cmd = "pdm build"}
+deploy.shell = "cloudsmith push python neorezo/neorezo dist/*.whl"
 
 [bdist_wheel]
 universal = 1

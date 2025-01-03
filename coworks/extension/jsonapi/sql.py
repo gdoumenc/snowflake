@@ -2,6 +2,7 @@ import typing as t
 from datetime import datetime
 
 from coworks.utils import to_bool
+from flask import current_app
 from sqlalchemy import ColumnOperators
 from sqlalchemy import desc
 from sqlalchemy import inspect
@@ -24,6 +25,7 @@ def sql_filter(sql_model: type[JsonApiDataMixin]):
         jsonapi_type: str = sql_model.jsonapi_type.__get__(sql_model)
     else:
         jsonapi_type = t.cast(str, sql_model.jsonapi_type)
+    current_app.logger.debug(f"Searching for SQL filters on '{jsonapi_type}' model")
     for filter in fetching_context.get_filter_parameters(jsonapi_type, value_as_iterator=False):
         for key, oper, value in filter:
             if '.' in key:
@@ -52,6 +54,7 @@ def sql_filter(sql_model: type[JsonApiDataMixin]):
                     raise UnprocessableEntity(msg)
 
                 # Appends a sql filter criterion on an association proxy column
+                current_app.logger.debug(f"Searching for SQL filters on proxy column {rel_name}.{col_name} {oper} {value} ")
                 proxy = AssociationProxyInstance.for_proxy(association_proxy(rel_name, col_name), sql_model, None)
                 _type = getattr(proxy.attr[1], 'type', None)
                 _sql_filters.extend(typed_filter(_type, proxy, oper, value))
