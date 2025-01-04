@@ -54,7 +54,8 @@ def sql_filter(sql_model: type[JsonApiDataMixin]):
                     raise UnprocessableEntity(msg)
 
                 # Appends a sql filter criterion on an association proxy column
-                current_app.logger.debug(f"Searching for SQL filters on proxy column {rel_name}.{col_name} {oper} {value} ")
+                current_app.logger.debug(
+                    f"Searching for SQL filters on proxy column {rel_name}.{col_name} {oper} {value} ")
                 proxy = AssociationProxyInstance.for_proxy(association_proxy(rel_name, col_name), sql_model, None)
                 _type = getattr(proxy.attr[1], 'type', None)
                 _sql_filters.extend(typed_filter(_type, proxy, oper, value))
@@ -165,7 +166,11 @@ def int_filter(column, oper, value) -> list[ColumnOperators]:
 def datetime_filter(column, oper, value) -> list[ColumnOperators]:
     """Datetime filter."""
     oper = oper or 'eq'
-    return [sort_operator(column, oper, datetime.fromisoformat(v)) for v in value]
+    try:
+        return [sort_operator(column, oper, datetime.fromisoformat(v)) for v in value]
+    except ValueError:
+        msg = f"Wrong datetime format for '{oper}' operator"
+        raise UnprocessableEntity(msg)
 
 
 def list_filter(column, oper, value) -> list[ColumnOperators]:
