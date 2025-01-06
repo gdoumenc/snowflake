@@ -11,7 +11,6 @@ import traceback
 import typing as t
 from functools import partial
 from functools import reduce
-from inspect import isfunction
 from pathlib import Path
 
 import boto3
@@ -25,7 +24,6 @@ from werkzeug.datastructures import ImmutableDict
 from werkzeug.datastructures import MultiDict
 from werkzeug.datastructures import WWWAuthenticate
 from werkzeug.exceptions import Forbidden
-from werkzeug.exceptions import InternalServerError
 from werkzeug.exceptions import Unauthorized
 from werkzeug.routing import Rule
 
@@ -44,11 +42,8 @@ from .utils import get_app_stage
 from .wrappers import CoworksMapAdapter
 from .wrappers import CoworksRequest
 from .wrappers import CoworksResponse
-from .wrappers import TokenResponse
 
 if t.TYPE_CHECKING:  # pragma: no cover
-    from _typeshed.wsgi import StartResponse
-    from _typeshed.wsgi import WSGIEnvironment
     from flask.app import App
 else:
     WSGIEnvironment = t.Any
@@ -246,7 +241,7 @@ class TechMicroService(Flask):
     def app_context(self):
         """Override to initialize coworks microservice.
         """
-        self._init_app(False)
+        self._init_app()
         return super().app_context()
 
     def create_url_adapter(self, _request: CoworksRequest | None):  # type: ignore[override]
@@ -333,12 +328,12 @@ class TechMicroService(Flask):
         except Exception as e:
             self.logger.error(f"Exception when storing response in {bucket}/{key} : {str(e)}")
 
-    def _init_app(self, in_lambda):
+    def _init_app(self):
         """Finalize the app initialization.
         """
         if not self._cws_app_initialized:
-            self._in_lambda_context = in_lambda
-            self._update_config(in_lambda=in_lambda)
+            self._in_lambda_context = False
+            self._update_config(in_lambda=False)
             self.add_coworks_routes()
             for fun in self.deferred_init_routes_functions:
                 fun()
@@ -348,86 +343,10 @@ class TechMicroService(Flask):
 
             self._cws_app_initialized = True
 
-    def __call__(self, arg1, arg2) -> dict:
+    def __call__(self, environ, start_response):
         """Main microservice entry point.
         """
-        in_flask = isfunction(arg2)
-        self._init_app(not in_flask)
-
-        # Lambda event call or Flask call
-        if in_flask:
-            res = self._flask_handler(arg1, arg2)
-        else:
-            res = self._lambda_handler(arg1, arg2)
-
-        return res
-
-    def _lambda_handler(self, event: dict[str, t.Any], context: dict[str, t.Any]):
-        """Lambda handler.
-        """
-        if event.get('type') == 'TOKEN':
-            return self._token_handler(event, context)
-        return self._api_handler(event, context)
-
-    def _token_handler(self, aws_event: dict[str, t.Any], aws_context: dict[str, t.Any]) -> dict:
-        """Authorization token handler.
-        """
-        self.logger.warning(f"Calling {self.name} for authorization : {aws_event}")
-
-        try:
-            res = self.token_authorizer(aws_event['authorizationToken'])
-            self.logger.warning(f"Token authorizer return is : {res}")
-            return TokenResponse(res, aws_event['methodArn']).json
-        except Exception as e:
-            self.full_logger_error(e)
-            return TokenResponse(False, aws_event['methodArn']).json
-
-    def _api_handler(
-            self, aws_event: dict[str, t.Any], aws_context: dict[str, t.Any]
-    ) -> t.Optional[t.Union[dict, str]]:
-        """API handler.
-        """
-        self.logger.warning(f"Calling {self.name} by api : {aws_event}")
-
-        # Transforms as simple client call and manage exception if needed
-        try:
-            with self.cws_client(aws_event, aws_context) as c:
-
-                # Get Flask return as dict or binary content
-                resp = self._convert_to_lambda_response(c.open())
-
-                # Strores response in S3 if asynchronous call
-                invocation_type = aws_event['headers'].get('invocationtype')
-                if invocation_type == 'Event':
-                    self.store_response(resp, aws_event['headers'])
-
-                # Encodes binary content
-                if not isinstance(resp, dict):
-                    str_resp = base64.b64encode(resp).decode('ascii')
-                    content_length = len(str_resp) if self.logger.getEffectiveLevel() == logging.DEBUG else "N/A"
-                    self.logger.warning(f"API returns binary content [length: {content_length}]")
-                    return str_resp
-
-                # Adds trace
-                self.logger.warning(f"API returns code {resp.get('statusCode')} and headers {resp.get('headers')}")
-                self.logger.warning(f"API body: {str(resp.get('body'))[:self.size_max_for_debug]}")
-
-                return resp
-
-        except Exception as e:
-            # no more in app context so must print for trace
-            print(f"Exception in {self.name} : {e}")
-            parts = ["Traceback (most recent call last):\n"]
-            parts.extend(traceback.format_stack(limit=15)[:-2])
-            parts.extend(traceback.format_exception(*sys.exc_info())[1:])
-            trace = reduce(lambda x, y: x + y, parts, "")
-            print(f"Traceback: {trace}")
-            headers = {'content_type': "application/json"}
-            return self._aws_payload(str(e), InternalServerError.code, headers)
-
-    def _flask_handler(self, environ: WSGIEnvironment, start_response: StartResponse):
-        """Flask handler.
-        """
+        self._init_app()
         return self.wsgi_app(environ, start_response)
 
     def _update_config(self, *, in_lambda: bool):
@@ -439,58 +358,23 @@ class TechMicroService(Flask):
             self._cws_conf_updated = True
 
     def _check_token(self):
-        """Simulates the authorization process of lambda if not in lambda context."""
-        if not self.in_lambda_context:
+        # Get no_auth option for this entry
+        no_auth = False
+        if request.url_rule:
+            view_function = self.view_functions.get(request.url_rule.endpoint, None)
+            if view_function:
+                no_auth = get_cws_annotations(view_function, '__CWS_NO_AUTH', False)
 
-            # Get no_auth option for this entry
-            no_auth = False
-            if request.url_rule:
-                view_function = self.view_functions.get(request.url_rule.endpoint, None)
-                if view_function:
-                    no_auth = get_cws_annotations(view_function, '__CWS_NO_AUTH', False)
-
-            # Checks token if authorization needed
-            if not no_auth:
-                try:
-                    token = self.header_autorizer_token
-                    valid = self.token_authorizer(token)
-                    if not valid:
-                        raise Forbidden()
-                except Exception as e:
-                    current_app.logger.exception(e)
+        # Checks token if authorization needed
+        if not no_auth:
+            try:
+                token = self.header_autorizer_token
+                valid = self.token_authorizer(token)
+                if not valid:
                     raise Forbidden()
-
-    def _convert_to_lambda_response(self, resp: CoworksResponse) -> t.Union[dict, bytes]:
-        """Convert Lambda response (dict for JSON or text result, bytes for binary content)."""
-
-        # returns JSON structure
-        if resp.is_json:
-            try:
-                return self._aws_payload(resp.json, resp.status_code, resp.headers)
-            except (Exception,):
-                resp.mimetype = "text/plain"
-
-        # returns simple string JSON structure
-        if resp.mimetype and resp.mimetype.startswith('text'):
-            try:
-                return self._aws_payload(resp.get_data(True), resp.status_code, resp.headers)
-            except ValueError:
-                pass
-
-        # returns direct payload
-        data = resp.get_data()
-        if not isinstance(data, bytes):
-            msg = f'Expected bytes type for body with binary Content-Type. Got {type(data)} type body instead.'
-            raise ValueError(msg)
-        return data
-
-    def _aws_payload(self, body, status_code, headers):
-        return {
-            "statusCode": status_code,
-            "headers": {k: v for k, v in headers.items()},
-            "body": body,
-            "isBase64Encoded": False,
-        }
+            except Exception as e:
+                current_app.logger.exception(e)
+                raise Forbidden()
 
     def full_logger_error(self, error):
         self.logger.error(f"Exception in {self.name} : {error}")

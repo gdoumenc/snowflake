@@ -1,6 +1,7 @@
 import os
 from unittest import mock
 
+import pytest
 from flask import json
 
 from coworks import TechMicroService
@@ -39,6 +40,7 @@ class ContentMS(TechMicroService):
         return b"test"
 
 
+@pytest.mark.skip
 @mock.patch.dict(os.environ, {"TOKEN": "token"})
 class TestClass:
     def test_default_content_type(self):

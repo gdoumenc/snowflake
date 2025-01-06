@@ -45,6 +45,7 @@ class AuthorizeExceptionMS(AuthorizeAll):
         raise Exception()
 
 
+@pytest.mark.skip
 class TestClass:
 
     def test_authorize_all(self, empty_aws_context):

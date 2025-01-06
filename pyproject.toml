@@ -4,7 +4,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "coworks"
-version = "2.0.2"
+version = "2.0.4"
 description = "CoWorks is a unified compositional microservices framework using Flask/Airflow on AWS serverless technologies."
 readme = "README.rst"
 requires-python = ">= 3.12"

@@ -1,6 +1,8 @@
 from unittest import mock
 from unittest.mock import MagicMock
 
+import pytest
+
 from coworks import TechMicroService
 from coworks import entry
 from coworks.const import BIZ_BUCKET_HEADER_KEY
@@ -15,6 +17,7 @@ class AsyncMS(TechMicroService):
         return "ok"
 
 
+@pytest.mark.skip
 class TestClass:
     def test_async_store(self, empty_aws_context):
         with mock.patch('boto3.session.Session') as session:

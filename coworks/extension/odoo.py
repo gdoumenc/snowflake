@@ -3,7 +3,6 @@ import typing as t
 import xmlrpc.client
 
 import requests
-from aws_xray_sdk.core import xray_recorder
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
@@ -12,7 +11,6 @@ from werkzeug.exceptions import BadRequest
 from werkzeug.exceptions import NotFound
 
 from coworks import TechMicroService
-from coworks.extension.xray import XRay
 from .jsonapi import JsonApiDataMixin
 from .jsonapi import JsonApiDict
 from .jsonapi.data import CursorPagination
@@ -153,14 +151,12 @@ class Odoo:
     def init_app(self, app):
         self.app = app
 
-    @XRay.capture(xray_recorder)
     def query(self, model: str, method: str = "search_read", *, fields: list[str] | None = None,
               order: str | None = None, domain: list[tuple[str, str, t.Any]] | None = None,
               bind_key: str | None = None):
         return OdooQuery(odoo=self, model=model, method=method, fields=fields, order=order, domain=domain,
                          bind_key=bind_key)
 
-    @XRay.capture(xray_recorder)
     def kw(self, model: str, method: str = "search_read", *, id: int | None = None, fields: list[str] | None = None,
            order: str | None = None, domain: list[tuple[str, str, t.Any]] | None = None, limit: int = 100,
            page_size: int | None = None, page: int = 0, ensure_one: bool = False, bind_key: str | None = None):
@@ -214,7 +210,6 @@ class Odoo:
 
         return {"ids": [rec['id'] for rec in res], "values": res}
 
-    @XRay.capture(xray_recorder)
     def create(self, model: str, data: list[dict] | None = None, bind_key: str | None = None) -> int:
         """Creates new records for the model.
 
@@ -227,7 +222,6 @@ class Odoo:
         """
         return self.odoo_execute_kw(model, "create", data, bind_key=bind_key)
 
-    @XRay.capture(xray_recorder)
     def write(self, model: str, id: int, data: dict | None = None, bind_key: str | None = None) -> list:
         """Updates one record with the provided values.
         See also: https://www.odoo.com/documentation/14.0/developer/reference/addons/orm.html#odoo.models.Model.write
@@ -238,7 +232,6 @@ class Odoo:
         """
         return self.odoo_execute_kw(model, "write", [[id], data], bind_key=bind_key)
 
-    @XRay.capture(xray_recorder)
     def delete_(self, model: str, id: int, bind_key: str | None = None) -> list:
         """delete the record.
         See also: https://www.odoo.com/documentation/14.0/developer/reference/addons/orm.html#odoo.models.Model.unlink
