@@ -2,7 +2,6 @@ import contextlib
 import typing as t
 from collections import defaultdict
 
-from jsonapi_pydantic.v1_0 import Link
 from jsonapi_pydantic.v1_0 import TopLevel
 from pydantic import BaseModel
 from pydantic import HttpUrl
@@ -151,13 +150,9 @@ class FetchingContext:
         if pagination.total > 1:
             links = toplevel.links or {}
             if pagination.has_prev:
-                links["prev"] = Link(
-                    href=HttpUrl(nr_url(request.path, {"page[number]": pagination.prev_num}, merge_query=True))
-                )
+                links["prev"] = HttpUrl(nr_url(request.path, {"page[number]": pagination.prev_num}, merge_query=True))
             if pagination.has_next:
-                links["next"] = Link(
-                    href=HttpUrl(nr_url(request.path, {"page[number]": pagination.next_num}, merge_query=True))
-                )
+                links["next"] = HttpUrl(nr_url(request.path, {"page[number]": pagination.next_num}, merge_query=True))
             toplevel.links = links
 
         meta = toplevel.meta or {}

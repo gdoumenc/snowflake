@@ -115,6 +115,9 @@ class JsonApiDataMixin:
         :param exclude: the set of fields to exclude from the included resources
         :param prefix: the prefix of the included resources (indirect inclusion)
         """
+        if isinstance(jsonapi.fetching_context, str):
+            raise InternalServerError("Entry not defined as jsonapi one.")
+
         prefix = prefix or ''
         include = include or jsonapi.fetching_context.field_names(self.jsonapi_type)
         exclude = exclude or set()
